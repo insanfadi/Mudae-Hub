@@ -1,11 +1,12 @@
 {
   "name": "mudae-hub",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "lint": "next lint"
   },
   "dependencies": {
     "next": "14.2.3",
@@ -13,8 +14,8 @@
     "react-dom": "18.3.1",
     "firebase": "10.11.1",
     "lucide-react": "0.378.0",
-    "clsx": "latest",
-    "tailwind-merge": "latest"
+    "clsx": "^2.1.1",
+    "tailwind-merge": "^2.3.0"
   },
   "devDependencies": {
     "autoprefixer": "10.4.19",
