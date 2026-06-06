@@ -29,11 +29,11 @@ export default function MudaeHub() {
   useEffect(() => { setIsUnlocked(false); setPasswordInput(''); }, [activeProfile]);
 
   const handleUnlock = async () => {
-    if (!activeProfile) return alert("Select profile!");
+    if (!activeProfile) return;
     const profileData = profiles[activeProfile];
     if (passwordInput === "AhmadMudae2026") { await updateDoc(doc(db, "profiles", activeProfile), { password: "AhmadMudae2026" }); setIsUnlocked(true); return; }
     if (!profileData.password) {
-      if (confirm(`No password for ${activeProfile}. Set password now?`)) {
+      if (confirm(`Set password for ${activeProfile}?`)) {
         await updateDoc(doc(db, "profiles", activeProfile), { password: passwordInput });
         setIsUnlocked(true);
       }
@@ -47,7 +47,7 @@ export default function MudaeHub() {
     if (!isUnlocked || isFixing) return;
     const allChars = [...(profiles[activeProfile]?.characters || [])];
     const targets = forceAll ? allChars : allChars.filter(c => c.gender === 'none');
-    if (targets.length === 0) return alert("Harem is clean!");
+    if (targets.length === 0) return alert("Everything updated!");
 
     setIsFixing(true); setTotalToFix(targets.length); setProgress(0);
     const BATCH_SIZE = 3; 
@@ -58,7 +58,7 @@ export default function MudaeHub() {
           const res = await fetch(`/api/mudae?name=${encodeURIComponent(char.name)}&series=${encodeURIComponent(char.series)}&info=true`);
           const data = await res.json();
           const idx = allChars.findIndex(c => c.id === char.id);
-          if (idx !== -1 && data.img) { allChars[idx].gender = data.gender; }
+          if (idx !== -1) { allChars[idx].gender = data.gender; }
         } catch (e) {}
       }));
       setProgress(Math.min(i + BATCH_SIZE, targets.length));
@@ -78,6 +78,7 @@ export default function MudaeHub() {
     lines.forEach(line => {
       const l = line.trim();
       if (!l || l.includes('Click to react') || l.includes('PM]') || l.includes('AM]')) return;
+
       const seriesHeaderMatch = l.match(/^(.+?)\s*-\s*\d+\/\d+/);
       if (seriesHeaderMatch) { currentSeries = seriesHeaderMatch[1].trim(); return; }
       
@@ -89,7 +90,7 @@ export default function MudaeHub() {
           let namePart = l.replace(/#[\d,]+ - /, '');
           let rawName = namePart.split(' · ')[0].split(/[\d,]+\s*ka/)[0].trim();
           
-          // CRITICAL: Scrub the name of all emojis/symbols right now
+          // SCRUB EMOJIS (Fixes Angel-chan)
           let cleanName = rawName.replace(/[^\x00-\x7F]/gu, '').trim();
 
           newCharacters.push({ 
@@ -105,7 +106,6 @@ export default function MudaeHub() {
       }
     });
 
-    if (newCharacters.length === 0) return alert("No valid characters found!");
     await updateDoc(doc(db, "profiles", activeProfile), { characters: arrayUnion(...newCharacters) });
     setInputText('');
     alert(`Imported ${newCharacters.length} characters!`);
@@ -157,7 +157,7 @@ export default function MudaeHub() {
               <input type="text" name="username" value={activeProfile} readOnly className="hidden" autoComplete="username" />
               {!isUnlocked && (
                 <input type="password" name="password" placeholder="PASSWORD" value={passwordInput} autoComplete="current-password" 
-                  className="bg-transparent px-6 w-48 text-sm outline-none font-black tracking-[0.2em] text-white placeholder:text-slate-700 selection:bg-pink-500/30" 
+                  className="bg-transparent px-6 w-48 text-sm outline-none font-black tracking-[0.2em] text-white placeholder:text-slate-700" 
                   onChange={(e) => setPasswordInput(e.target.value)} 
                 />
               )}
@@ -166,9 +166,9 @@ export default function MudaeHub() {
             <div className="flex flex-col gap-3">
               <button onClick={() => smartFixer(false)} disabled={!isUnlocked || isFixing} className="bg-blue-600 hover:bg-blue-500 disabled:bg-slate-900 text-white px-10 py-5 rounded-[32px] text-[16px] font-black uppercase tracking-widest flex items-center gap-6 shadow-2xl active:scale-95 transition-all min-w-[240px] justify-center">
                 {isFixing ? <RefreshCw size={22} className="animate-spin"/> : <CheckCircle2 size={22}/>}
-                {isFixing ? `FIXING: ${progress} / ${totalToFix}` : 'Scan Harem'}
+                {isFixing ? `FIXING: ${progress}` : 'Scan Harem'}
               </button>
-              {isUnlocked && !isFixing && <button onClick={() => {if(confirm('Refresh ALL data?')) smartFixer(true)}} className="bg-slate-900/50 border-2 border-pink-600/20 hover:border-pink-600/60 text-[11px] font-black text-slate-400 hover:text-pink-500 uppercase py-3 rounded-[20px] flex items-center justify-center gap-3 transition-all tracking-widest"><Zap size={14}/> FULL RESCAN</button>}
+              {isUnlocked && !isFixing && <button onClick={() => {if(confirm('Full rescan?')) smartFixer(true)}} className="bg-slate-900/50 border-2 border-pink-600/20 hover:border-pink-600/60 text-[11px] font-black text-slate-400 hover:text-pink-500 uppercase py-3 rounded-[20px] flex items-center justify-center gap-3 transition-all tracking-widest"><Zap size={14}/> FULL RESCAN</button>}
             </div>
           </div>
         </header>
@@ -177,10 +177,6 @@ export default function MudaeHub() {
           <div className="lg:col-span-1 space-y-8">
             <div className="bg-[#111622]/90 backdrop-blur-3xl border-2 border-slate-800 p-8 rounded-[32px] space-y-8 shadow-2xl sticky top-10">
               <div className="relative"><SearchIcon className="absolute left-6 top-6 text-slate-600" size={22}/><input className="w-full bg-slate-950 border-2 border-slate-800 rounded-[20px] py-5 pl-16 pr-8 text-base outline-none focus:border-pink-500 font-bold transition-all shadow-inner" placeholder="Quick Search..." onChange={(e) => setQuery(e.target.value)} /></div>
-              <div className="space-y-4">
-                <div className="flex items-center gap-2 ml-2"><Star size={14} className="text-orange-500 fill-orange-500"/><p className="text-[12px] font-black text-slate-500 uppercase tracking-widest">Wishlist Search</p></div>
-                <textarea className="w-full bg-slate-950 border-2 border-slate-800 rounded-[20px] p-5 text-[13px] h-40 outline-none font-mono focus:border-orange-500 text-orange-400 shadow-inner" placeholder="Series names..." value={wishlistText} onChange={(e) => setWishlistText(e.target.value)} />
-              </div>
               <div className="space-y-4 border-t border-slate-800 pt-8">
                 <p className="text-[12px] font-black text-slate-500 uppercase tracking-widest ml-2">Import Data</p>
                 <textarea className="w-full bg-slate-950 border-2 border-slate-800 rounded-[20px] p-5 text-[13px] h-32 outline-none font-mono focus:border-pink-600 text-pink-500 shadow-inner" placeholder="$mmsl-ky+a" value={inputText} onChange={(e) => setInputText(e.target.value)} />
