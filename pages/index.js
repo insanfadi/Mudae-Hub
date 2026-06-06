@@ -70,7 +70,7 @@ export default function MudaeHub() {
     if (!profileData) return;
     if (passwordInput === "AhmadMudae2026") { await updateDoc(doc(db, "profiles", activeProfile), { password: "AhmadMudae2026" }); setIsUnlocked(true); return; }
     if (!profileData.password) {
-      if (confirm(`No password for ${activeProfile}. Set "${passwordInput}" as password?`)) {
+      if (confirm(`Set "${passwordInput}" as password?`)) {
         await updateDoc(doc(db, "profiles", activeProfile), { password: passwordInput });
         setIsUnlocked(true);
       }
@@ -84,7 +84,7 @@ export default function MudaeHub() {
     if (!isUnlocked || isFixing) return;
     const allChars = [...(profiles[activeProfile]?.characters || [])];
     const targets = forceAll ? allChars : allChars.filter(c => !c.series || c.series.toLowerCase().includes('unknown') || c.gender === 'none');
-    if (targets.length === 0) return alert("Everything is fully updated!");
+    if (targets.length === 0) return alert("Harem is clean!");
 
     setIsFixing(true); setTotalToFix(targets.length); setProgress(0);
     const BATCH_SIZE = 3; 
@@ -182,15 +182,16 @@ export default function MudaeHub() {
               <input type="text" name="username" value={activeProfile} readOnly className="hidden" autoComplete="username" />
               {!isUnlocked && (
                 <input type="password" name="password" placeholder="PASSWORD" value={passwordInput} autoComplete="current-password" 
-                  className="bg-transparent px-6 w-48 text-sm outline-none font-black tracking-[0.2em] text-white placeholder:text-slate-700 selection:bg-pink-500/30" 
+                  className="bg-transparent px-6 w-48 text-sm outline-none font-black tracking-[0.2em] text-white placeholder:text-slate-700" 
                   onChange={(e) => setPasswordInput(e.target.value)} 
                 />
               )}
               <button type="submit" className={`p-3.5 rounded-2xl transition-all duration-500 ${isUnlocked ? 'bg-green-500 text-white shadow-lg rotate-[360deg]' : 'bg-slate-800 text-slate-500 hover:text-white'}`}><Unlock size={24}/></button>
             </form>
             <div className="flex flex-col gap-3">
-              <button onClick={() => smartFixer(false)} disabled={!isUnlocked || isFixing} className="bg-blue-600 hover:bg-blue-500 disabled:bg-slate-900 text-white px-10 py-5 rounded-[32px] text-[16px] font-black uppercase tracking-widest flex items-center gap-6 shadow-2xl shadow-blue-600/20 active:scale-95 min-w-[240px] justify-center">
+              <button onClick={() => smartFixer(false)} disabled={!isUnlocked || isFixing} className="bg-blue-600 hover:bg-blue-500 disabled:bg-slate-900 text-white px-10 py-5 rounded-[32px] text-[16px] font-black uppercase tracking-widest flex items-center gap-6 shadow-2xl shadow-blue-600/20 active:scale-95 transition-all min-w-[240px] justify-center">
                 {isFixing ? <RefreshCw size={22} className="animate-spin"/> : <CheckCircle2 size={22}/>}
                 {isFixing ? `FIXING: ${progress} / ${totalToFix}` : 'Scan Harem'}
               </button>
-              {isUnlocked && !isFixing && <button onClick={() =
+              {isUnlocked && !isFixing && <button onClick={() => {if(confirm('Full rescan?')) smartFixer(true)}} className="bg-slate-900/50 border-2 border-pink-600/20 hover:border-pink-600/60 text-[11px] font-black text-slate-400 hover:text-pink-500 uppercase py-3 rounded-[20px] flex items-center justify-center gap-3 transition-all tracking-widest"><Zap size={14}/> FULL RESCAN</button>}
+            </div>
