@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { db } from '../lib/firebase';
 import { doc, setDoc, onSnapshot, collection, updateDoc, arrayUnion, arrayRemove, deleteDoc } from 'firebase/firestore';
-import { Search, Lock, Unlock, Tag, Trash2, X, RefreshCw, Users, CheckCircle2, ArrowUpDown, UserPlus, Heart, Star, Zap } from 'lucide-react';
+import { Search, Lock, Unlock, Tag, Trash2, X, RefreshCw, Users, CheckCircle2, ArrowUpDown, UserPlus, Heart, Star, Zap, Gem, Key } from 'lucide-react';
 
 const CharacterCard = React.memo(({ char, isUnlocked, onToggleTrade, onDelete, isTagged }) => {
   const [imgError, setImgError] = useState(false);
@@ -12,13 +12,33 @@ const CharacterCard = React.memo(({ char, isUnlocked, onToggleTrade, onDelete, i
       <div className="aspect-[2/3] relative overflow-hidden bg-[#0b0f1a]">
         <img src={imgError ? `https://via.placeholder.com/225x350?text=Reloading` : imgUrl} alt={char.name} className="w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-110" onError={() => setImgError(true)} loading="lazy" />
         <div className="absolute inset-0 bg-gradient-to-t from-[#0b0f1a] via-transparent to-transparent opacity-90" />
-        <div className="absolute top-4 left-4 bg-black/80 backdrop-blur-xl px-3 py-1 rounded-xl text-[13px] font-black text-orange-400 border border-white/10 shadow-2xl z-10">{char.kakera.toLocaleString()}</div>
-        {isUnlocked && <button onClick={() => onDelete(char)} className="absolute top-4 right-4 p-2.5 bg-red-600 hover:bg-red-500 text-white rounded-2xl opacity-0 group-hover:opacity-100 transition-all shadow-xl z-20"><X size={20}/></button>}
+        
+        {/* KAKERA WITH DIAMOND */}
+        <div className="absolute top-4 left-4 bg-black/80 backdrop-blur-xl px-3 py-1.5 rounded-xl text-[13px] font-black text-orange-400 border border-white/10 shadow-2xl z-10 flex items-center gap-1.5">
+          <Gem size={12} className="text-orange-400 fill-orange-400/20" />
+          {char.kakera?.toLocaleString()}
+        </div>
+
+        {/* KEYS INDICATOR */}
+        {char.keys > 0 && (
+          <div className="absolute top-4 right-4 bg-yellow-500/90 backdrop-blur-md px-3 py-1.5 rounded-xl text-[13px] font-black text-black shadow-2xl z-10 flex items-center gap-1.5">
+            <Key size={12} className="fill-black" />
+            {char.keys}
+          </div>
+        )}
+
+        {isUnlocked && <button onClick={() => onDelete(char)} className="absolute top-4 right-4 p-2.5 bg-red-600 hover:bg-red-500 text-white rounded-2xl opacity-0 group-hover:opacity-100 transition-all shadow-xl z-30"><X size={20}/></button>}
         <button onClick={() => onToggleTrade(char.id)} className={`absolute bottom-5 right-5 p-4 rounded-[20px] backdrop-blur-xl transition-all z-20 ${isTagged ? 'bg-pink-600 text-white shadow-pink-600/50 shadow-lg scale-110' : 'bg-white/5 text-white/20 hover:bg-white/10'}`}><Tag size={22}/></button>
       </div>
+
       <div className="p-6 bg-[#161b29] z-20">
-        <h4 className="text-[20px] font-bold text-white truncate uppercase tracking-tight leading-tight mb-1">{char.name}</h4>
+        <div className="flex items-center gap-2">
+           <h4 className="text-[20px] font-bold text-white truncate uppercase tracking-tight leading-tight mb-1">{char.name}</h4>
+           {char.gender === 'female' && <span className="text-pink-500 font-black text-lg">♀</span>}
+           {char.gender === 'male' && <span className="text-blue-500 font-black text-lg">♂</span>}
+        </div>
         <p className={`text-[14px] truncate font-black uppercase tracking-widest ${char.series?.toLowerCase().includes('unknown') ? 'text-red-500' : 'text-slate-500'}`}>{char.series || 'Unknown'}</p>
+        {char.rank && <p className="text-[10px] font-black text-slate-700 mt-1 uppercase tracking-tighter italic">Rank #{char.rank}</p>}
       </div>
     </div>
   );
@@ -51,7 +71,7 @@ export default function MudaeHub() {
     const profileData = profiles[activeProfile];
     if (!profileData) return;
     if (passwordInput === "AhmadMudae2026") { await updateDoc(doc(db, "profiles", activeProfile), { password: "AhmadMudae2026" }); setIsUnlocked(true); return; }
-    if (!profileData.password) { if (confirm(`Set "${passwordInput}" as password for ${activeProfile}?`)) { await updateDoc(doc(db, "profiles", activeProfile), { password: passwordInput }); setIsUnlocked(true); } return; }
+    if (!profileData.password) { if (confirm(`Set "${passwordInput}" as password?`)) { await updateDoc(doc(db, "profiles", activeProfile), { password: passwordInput }); setIsUnlocked(true); } return; }
     if (passwordInput === profileData.password) setIsUnlocked(true);
     else alert("Wrong Password!");
   };
@@ -59,18 +79,22 @@ export default function MudaeHub() {
   const smartFixer = async (forceAll = false) => {
     if (!isUnlocked || isFixing) return;
     const allChars = [...(profiles[activeProfile]?.characters || [])];
-    const targets = forceAll ? allChars : allChars.filter(c => !c.series || c.series.toLowerCase().includes('unknown'));
-    if (targets.length === 0) return alert("Everything is fixed!");
+    const targets = forceAll ? allChars : allChars.filter(c => !c.series || c.series.toLowerCase().includes('unknown') || c.gender === 'none');
+    if (targets.length === 0) return alert("Everything is fully updated!");
+
     setIsFixing(true); setTotalToFix(targets.length); setProgress(0);
     const BATCH_SIZE = 3; 
     for (let i = 0; i < targets.length; i += BATCH_SIZE) {
       const batch = targets.slice(i, i + BATCH_SIZE);
       await Promise.all(batch.map(async (char) => {
         try {
-          const res = await fetch(`/api/mudae?name=${encodeURIComponent(char.name)}&info=true`);
+          const res = await fetch(`/api/mudae?name=${encodeURIComponent(char.name)}&series=${encodeURIComponent(char.series)}&info=true`);
           const data = await res.json();
           const idx = allChars.findIndex(c => c.id === char.id);
-          if (idx !== -1 && data.series) { allChars[idx].series = data.series; }
+          if (idx !== -1 && data.img) {
+              allChars[idx].gender = data.gender;
+              if (!allChars[idx].series || allChars[idx].series === 'Unknown') allChars[idx].series = data.series;
+          }
         } catch (e) {}
       }));
       setProgress(i + batch.length);
@@ -79,6 +103,37 @@ export default function MudaeHub() {
     }
     await updateDoc(doc(db, "profiles", activeProfile), { characters: allChars });
     setIsFixing(false);
+  };
+
+  // TESTED PARSER FOR $mmsl-kya
+  const handleImport = async () => {
+    if (!isUnlocked) return alert("Unlock First!");
+    const lines = inputText.split('\n');
+    const news = lines.map(l => {
+      const rankMatch = l.match(/#([\d,]+)/);
+      const kakeraMatch = l.match(/([\d,]+)\s*ka/);
+      const keysMatch = l.match(/<(\d+)\s*key/);
+      if (!kakeraMatch) return null;
+
+      // Extract Name and Series: "664 (Kage no Jitsuryokusha ni Naritakute!)"
+      const contentPart = l.replace(/#[\d,]+ - /, '').split('•')[0].trim();
+      const seriesMatch = contentPart.match(/\(([^)]+)\)$/);
+      const name = seriesMatch ? contentPart.replace(seriesMatch[0], '').trim() : contentPart;
+      const series = seriesMatch ? seriesMatch[1] : "Unknown";
+
+      return { 
+        id: Math.random().toString(36).substr(2, 9),
+        name, series, 
+        kakera: parseInt(kakeraMatch[1].replace(/,/g, '')),
+        rank: rankMatch ? rankMatch[1] : null,
+        keys: keysMatch ? parseInt(keysMatch[1]) : 0,
+        gender: "none"
+      };
+    }).filter(Boolean);
+
+    await updateDoc(doc(db, "profiles", activeProfile), { characters: arrayUnion(...news) });
+    setInputText('');
+    alert(`Imported ${news.length} chars with series!`);
   };
 
   const sortedChars = useMemo(() => {
@@ -99,7 +154,6 @@ export default function MudaeHub() {
           <div><h1 className="text-xl font-black text-white tracking-tighter uppercase italic leading-none">Mudae Hub</h1><p className="text-[10px] font-bold text-pink-500 tracking-[0.4em] uppercase mt-1">Dashboard</p></div>
         </div>
         <nav className="flex-1 space-y-3">
-          <p className="text-[12px] font-black text-slate-600 uppercase tracking-widest ml-2 mb-6">Rollers List</p>
           {Object.keys(profiles).map(name => (<button key={name} onClick={() => setActiveProfile(name)} className={`w-full flex items-center justify-between px-6 py-4 rounded-[20px] text-[15px] font-bold transition-all duration-300 ${activeProfile === name ? 'bg-pink-600 text-white shadow-2xl translate-x-2' : 'text-slate-400 hover:bg-white/5 hover:text-white'}`}><div className="flex items-center gap-4"><Users size={20}/> {name}</div></button>))}
           <button onClick={() => { const n = prompt("Name?"); if(n) setDoc(doc(db, "profiles", n), { characters: [], tradeTags: [], password: prompt("Password:") }); }} className="w-full border-2 border-dashed border-slate-800 hover:border-pink-600 py-5 rounded-[20px] text-[13px] font-black uppercase text-slate-500 mt-10 flex items-center justify-center gap-3"><UserPlus size={18}/> Add Roller</button>
         </nav>
@@ -117,33 +171,23 @@ export default function MudaeHub() {
           </div>
 
           <div className="flex flex-wrap items-center gap-6 justify-center">
-            {/* DYNAMIC PASSWORD FORM - SHRINKS WHEN UNLOCKED */}
             <form onSubmit={(e) => { e.preventDefault(); handleUnlock(); }} className="bg-slate-900/50 border-2 border-slate-800 rounded-[28px] flex items-center p-2.5 shadow-2xl focus-within:border-pink-600 transition-all">
               <input type="text" name="username" value={activeProfile} readOnly className="hidden" autoComplete="username" />
-              
               {!isUnlocked && (
                 <input type="password" name="password" placeholder="PASSWORD" value={passwordInput} autoComplete="current-password" 
-                  className="bg-transparent px-6 w-48 text-sm outline-none font-black tracking-[0.2em] text-white placeholder:text-slate-700 selection:bg-pink-500/30" 
+                  className="bg-transparent px-6 w-48 text-sm outline-none font-black tracking-[0.2em] text-white placeholder:text-slate-700" 
                   onChange={(e) => setPasswordInput(e.target.value)} 
                 />
               )}
-              
-              <button type="submit" className={`p-3.5 rounded-2xl transition-all duration-500 ${isUnlocked ? 'bg-green-500 text-white shadow-lg rotate-[360deg]' : 'bg-slate-800 text-slate-500 hover:text-white'}`}>
-                {isUnlocked ? <Unlock size={24}/> : <Lock size={24}/>}
-              </button>
+              <button type="submit" className={`p-3.5 rounded-2xl transition-all duration-500 ${isUnlocked ? 'bg-green-500 text-white shadow-lg rotate-[360deg]' : 'bg-slate-800 text-slate-500 hover:text-white'}`}><Unlock size={24}/></button>
             </form>
             
             <div className="flex flex-col gap-3">
-              <button onClick={() => smartFixer(false)} disabled={!isUnlocked || isFixing} className="bg-blue-600 hover:bg-blue-500 disabled:bg-slate-900 text-white px-14 py-5 rounded-[32px] text-[16px] font-black uppercase tracking-widest flex items-center gap-6 shadow-2xl shadow-blue-600/20 active:scale-95 transition-all min-w-[240px] justify-center">
+              <button onClick={() => smartFixer(false)} disabled={!isUnlocked || isFixing} className="bg-blue-600 hover:bg-blue-500 disabled:bg-slate-900 text-white px-10 py-5 rounded-[32px] text-[16px] font-black uppercase tracking-widest flex items-center gap-6 shadow-2xl active:scale-95 min-w-[240px] justify-center">
                 {isFixing ? <RefreshCw size={22} className="animate-spin"/> : <CheckCircle2 size={22}/>}
                 {isFixing ? `FIXING: ${progress}` : 'Scan Harem'}
               </button>
-              
-              {isUnlocked && !isFixing && (
-                <button onClick={() => {if(confirm('Refresh data for ALL characters?')) smartFixer(true)}} className="bg-slate-900/50 border-2 border-pink-600/20 hover:border-pink-600/60 text-[11px] font-black text-slate-400 hover:text-pink-500 uppercase py-3 rounded-[20px] flex items-center justify-center gap-3 transition-all tracking-widest">
-                  <Zap size={14} className="fill-pink-500/20"/> FULL RESCAN
-                </button>
-              )}
+              {isUnlocked && !isFixing && <button onClick={() => {if(confirm('Refresh ALL images & gender?')) smartFixer(true)}} className="bg-slate-900/50 border-2 border-pink-600/20 hover:border-pink-600/60 text-[11px] font-black text-slate-400 hover:text-pink-500 uppercase py-3 rounded-[20px] flex items-center justify-center gap-3 transition-all tracking-widest"><Zap size={14}/> FULL RESCAN</button>}
             </div>
           </div>
         </header>
@@ -158,8 +202,8 @@ export default function MudaeHub() {
               </div>
               <div className="space-y-4 border-t border-slate-800 pt-8">
                 <p className="text-[12px] font-black text-slate-500 uppercase tracking-widest ml-2">Import Data</p>
-                <textarea className="w-full bg-slate-950 border-2 border-slate-800 rounded-[20px] p-5 text-[13px] h-32 outline-none font-mono focus:border-pink-600 text-pink-500 shadow-inner" placeholder="$mms l- k" value={inputText} onChange={(e) => setInputText(e.target.value)} />
-                <button onClick={() => { const news = inputText.split('\n').map(l => { const k = l.match(/([\d,]+)\s*ka/); if (!k) return null; return { name: l.replace(/#[\d,]+ - /, '').split(k[0])[0].trim(), series: "Unknown", kakera: parseInt(k[1].replace(/,/g, '')), id: Math.random().toString(36).substr(2, 9) }; }).filter(Boolean); updateDoc(doc(db, "profiles", activeProfile), { characters: arrayUnion(...news) }); setInputText(''); }} disabled={!isUnlocked} className="w-full bg-pink-600 hover:bg-pink-500 py-5 rounded-[20px] text-[15px] font-black text-white uppercase shadow-2xl transition-all">Import Chars</button>
+                <textarea className="w-full bg-slate-950 border-2 border-slate-800 rounded-[20px] p-5 text-[13px] h-32 outline-none font-mono focus:border-pink-600 text-pink-500 shadow-inner" placeholder="$mmsl-kya" value={inputText} onChange={(e) => setInputText(e.target.value)} />
+                <button onClick={handleImport} disabled={!isUnlocked} className="w-full bg-pink-600 hover:bg-pink-500 py-5 rounded-[20px] text-[15px] font-black text-white uppercase shadow-2xl transition-all">Import Chars</button>
               </div>
             </div>
           </div>
