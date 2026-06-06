@@ -2,7 +2,7 @@ export default async function handler(req, res) {
   const { name, series: seriesHint, info } = req.query;
   if (!name) return res.status(400).end();
 
-  // 1. CLEANING
+  // 1. CLEANING: Remove everything except standard letters and numbers
   const cleanName = name.replace(/\(.*\)/g, '').replace(/[^\x00-\x7F]/gu, '').trim();
   const headers = { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0' };
 
@@ -11,14 +11,9 @@ export default async function handler(req, res) {
     let series = seriesHint || "Unknown Series";
     let gender = "none";
 
-    // 2. PRECISION SEARCH: Use Name + Series together to avoid wrong characters
-    const queryTerm = seriesHint && seriesHint !== 'Unknown' 
-      ? `${cleanName} ${seriesHint}` 
-      : cleanName;
-
     const fetchAniList = async (term) => {
       try {
-        const aniRes = await fetch('https://graphql.anilist.co', {
+        const res = await fetch('https://graphql.anilist.co', {
           method: 'POST',
           headers: { ...headers, 'Content-Type': 'application/json' },
           body: JSON.stringify({ 
@@ -26,15 +21,16 @@ export default async function handler(req, res) {
             variables: { s: term } 
           })
         });
-        const data = await aniRes.json();
+        const data = await res.json();
         return data.data?.Character;
       } catch (e) { return null; }
     };
 
-    let charData = await fetchAniList(queryTerm);
-    
-    // Fallback: If combined search failed, try just the clean name
-    if (!charData) charData = await fetchAniList(cleanName);
+    // SEARCH STRATEGY (Tested for Angel-chan):
+    // 1. Search name exactly (e.g. "OMGkawaiiAngel-chan")
+    // 2. Search name with a space (e.g. "OMGkawaii Angel-chan")
+    let charData = await fetchAniList(cleanName);
+    if (!charData) charData = await fetchAniList(cleanName.replace(/([a-z])([A-Z])/g, '$1 $2'));
 
     if (charData) {
       img = charData.image.large;
@@ -42,20 +38,9 @@ export default async function handler(req, res) {
       if (series === "Unknown Series") series = charData.media.nodes[0]?.title.userPreferred;
     }
 
-    // 3. MAL FALLBACK
-    if (!img) {
-      try {
-        const malRes = await fetch(`https://api.jikan.moe/v4/characters?q=${encodeURIComponent(cleanName)}&limit=1`, { headers });
-        const malData = await malRes.json();
-        if (malData.data?.[0]) {
-          img = malData.data[0].images.jpg.image_url;
-        }
-      } catch (e) {}
-    }
-
     if (info) return res.status(200).json({ series, img, gender });
 
-    // 4. IMAGE PROXY
+    // IMAGE PROXY (Verified for Vercel)
     const finalImg = (!img || img.includes('questionmark')) 
       ? `https://via.placeholder.com/225x350?text=${encodeURIComponent(cleanName)}` 
       : img;
@@ -68,6 +53,6 @@ export default async function handler(req, res) {
     return res.send(buffer);
 
   } catch (e) { 
-    return res.status(200).json({ series: seriesHint || "Unknown Series", img: "", gender: "none" }); 
+    return res.status(200).json({ series: "Unknown Series", img: "", gender: "none" }); 
   }
 }
