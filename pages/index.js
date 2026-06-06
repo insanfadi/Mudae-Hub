@@ -1,40 +1,48 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { db } from '../lib/firebase';
 import { doc, setDoc, onSnapshot, collection, updateDoc, arrayUnion, arrayRemove, deleteDoc } from 'firebase/firestore';
-import { Search, Lock, Unlock, Tag, Trash2, X, RefreshCw, Users, CheckCircle2, ArrowUpDown, UserPlus } from 'lucide-react';
+import { Search, Lock, Unlock, Tag, Trash2, X, RefreshCw, Users, CheckCircle2, ArrowUpDown, UserPlus, Heart } from 'lucide-react';
 
 const CharacterCard = React.memo(({ char, isUnlocked, onToggleTrade, onDelete, isTagged }) => {
   const [imgError, setImgError] = useState(false);
   const imgUrl = `/api/mudae?name=${encodeURIComponent(char.name)}&series=${encodeURIComponent(char.series || 'unknown')}`;
 
   return (
-    <div className="group relative bg-[#161b29] rounded-3xl border-2 border-slate-800 hover:border-pink-500 transition-all duration-300 overflow-hidden shadow-2xl">
-      <div className="aspect-[2/3] relative bg-[#0b0f1a]">
+    <div className="group relative bg-[#161b29] rounded-[24px] border-2 border-slate-800 hover:border-pink-500 transition-all duration-300 overflow-hidden shadow-2xl flex flex-col">
+      {/* IMAGE CONTAINER - FIXED OVERFLOW AND HOVER */}
+      <div className="aspect-[2/3] relative overflow-hidden bg-[#0b0f1a]">
         <img 
           src={imgError ? `https://via.placeholder.com/225x350?text=Reloading` : imgUrl} 
           alt={char.name} 
-          className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" 
+          className="w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-110 transform-gpu" 
           onError={() => setImgError(true)}
           loading="lazy" 
         />
-        <div className="absolute inset-0 bg-gradient-to-t from-[#0b0f1a] via-transparent to-transparent opacity-90" />
-        <div className="absolute top-4 left-4 bg-black/80 backdrop-blur-md px-3 py-1 rounded-xl text-[13px] font-black text-orange-400 border border-white/10 shadow-2xl">
+        {/* GRADIENT OVERLAY */}
+        <div className="absolute inset-0 bg-gradient-to-t from-[#0b0f1a] via-transparent to-transparent opacity-80" />
+        
+        {/* KAKERA TAG */}
+        <div className="absolute top-4 left-4 bg-black/80 backdrop-blur-md px-3 py-1.5 rounded-xl text-[14px] font-black text-orange-400 border border-white/10 shadow-2xl z-10">
           {char.kakera.toLocaleString()}
         </div>
+
+        {/* DELETE BUTTON */}
         {isUnlocked && (
-          <button onClick={() => onDelete(char)} className="absolute top-4 right-4 p-2.5 bg-red-600 hover:bg-red-500 text-white rounded-2xl opacity-0 group-hover:opacity-100 transition-all shadow-xl">
+          <button onClick={() => onDelete(char)} className="absolute top-4 right-4 p-2.5 bg-red-600 hover:bg-red-500 text-white rounded-2xl opacity-0 group-hover:opacity-100 transition-all shadow-xl z-20">
             <X size={20}/>
           </button>
         )}
-        <button onClick={() => onToggleTrade(char.series)} className={`absolute bottom-5 right-5 p-4 rounded-2xl backdrop-blur-xl transition-all ${isTagged ? 'bg-pink-600 text-white shadow-pink-600/50 shadow-lg scale-110' : 'bg-white/5 text-white/20 hover:bg-white/10'}`}>
+
+        {/* TRADE TAG BUTTON */}
+        <button onClick={() => onToggleTrade(char.series)} className={`absolute bottom-5 right-5 p-4 rounded-2xl backdrop-blur-xl transition-all z-20 ${isTagged ? 'bg-pink-600 text-white shadow-pink-600/50 shadow-lg scale-110' : 'bg-white/5 text-white/20 hover:bg-white/10'}`}>
           <Tag size={20}/>
         </button>
       </div>
-      <div className="p-5">
-        {/* BIGGER FONT FOR NAMES */}
-        <h4 className="text-[16px] font-bold text-white truncate uppercase tracking-tight leading-tight">{char.name}</h4>
-        {/* BIGGER FONT FOR SERIES */}
-        <p className={`text-[12px] truncate font-black uppercase mt-2 tracking-widest ${char.series?.toLowerCase().includes('unknown') ? 'text-red-500' : 'text-slate-500'}`}>
+
+      {/* TEXT AREA - INCREASED SIZE */}
+      <div className="p-6 bg-[#161b29] relative z-10">
+        <h4 className="text-[18px] font-bold text-white truncate uppercase tracking-tight leading-tight mb-1">{char.name}</h4>
+        <p className={`text-[13px] truncate font-black uppercase tracking-widest ${char.series?.toLowerCase().includes('unknown') ? 'text-red-500' : 'text-slate-500'}`}>
           {char.series || 'Unknown'}
         </p>
       </div>
@@ -69,37 +77,24 @@ export default function MudaeHub() {
   const handleUnlock = async () => {
     const profileData = profiles[activeProfile];
     if (!profileData) return;
-
-    // FIX FOR OLD PROFILES (Like Ahmad)
     if (!profileData.password) {
-      const newPass = prompt("This profile has no password. Create one now to lock it:");
+      const newPass = prompt("Set a password for " + activeProfile + ":");
       if (newPass) {
         await updateDoc(doc(db, "profiles", activeProfile), { password: newPass });
-        alert("Password set! Now enter it to unlock.");
+        alert("Password Saved!");
       }
       return;
     }
-    
-    if (passwordInput === profileData.password) {
-      setIsUnlocked(true);
-    } else {
-      alert("Wrong password!");
-    }
+    if (passwordInput === profileData.password) setIsUnlocked(true);
+    else alert("Incorrect Password!");
   };
 
   const handleAddRoller = async () => {
     const name = prompt("Roller Name:");
     if (!name) return;
-    if (profiles[name]) return alert("Exists already!");
-    const pass = prompt("Create Password:");
+    const pass = prompt("Set Password:");
     if (!pass) return;
-
-    await setDoc(doc(db, "profiles", name), { 
-      characters: [], 
-      tradeTags: [],
-      password: pass,
-      createdAt: new Date().toISOString()
-    });
+    await setDoc(doc(db, "profiles", name), { characters: [], tradeTags: [], password: pass });
     setActiveProfile(name);
   };
 
@@ -127,16 +122,11 @@ export default function MudaeHub() {
   };
 
   const handleImport = async () => {
-    if (!isUnlocked) return alert("Unlock Profile First!");
+    if (!isUnlocked) return alert("Unlock First!");
     const news = inputText.split('\n').map(l => {
       const k = l.match(/([\d,]+)\s*ka/);
       if (!k) return null;
-      return { 
-        name: l.replace(/#[\d,]+ - /, '').split(k[0])[0].trim(), 
-        series: "Unknown", 
-        kakera: parseInt(k[1].replace(/,/g, '')), 
-        id: Math.random().toString(36).substr(2, 9) 
-      };
+      return { name: l.replace(/#[\d,]+ - /, '').split(k[0])[0].trim(), series: "Unknown", kakera: parseInt(k[1].replace(/,/g, '')), id: Math.random().toString(36).substr(2, 9) };
     }).filter(Boolean);
     await updateDoc(doc(db, "profiles", activeProfile), { characters: arrayUnion(...news) });
     setInputText('');
@@ -149,102 +139,89 @@ export default function MudaeHub() {
   }, [profiles, activeProfile, search, sortMode]);
 
   return (
-    <div className="min-h-screen bg-[#0b0f1a] text-slate-300 flex flex-col md:flex-row font-sans selection:bg-pink-500/30">
-      {/* SIDEBAR WITH TOP-LEFT LOGO */}
+    <div className="min-h-screen bg-[#0b0f1a] text-slate-300 flex flex-col md:flex-row font-sans">
+      {/* SIDEBAR */}
       <aside className="w-full md:w-80 bg-[#0f172a] border-r border-slate-800 p-8 flex flex-col shrink-0 z-50">
-        <div className="flex items-center gap-4 mb-12">
-          <div className="w-14 h-14 bg-gradient-to-br from-pink-400 to-pink-600 rounded-2xl flex items-center justify-center shadow-xl shadow-pink-600/20">
-            <img src="https://mudae.net/favicon.ico" className="w-10 h-10 brightness-200" alt="Mudae" />
+        {/* FIXED TOP-LEFT LOGO */}
+        <div className="flex items-center gap-4 mb-14">
+          <div className="w-16 h-16 bg-gradient-to-br from-pink-400 via-pink-500 to-pink-700 rounded-[22px] flex items-center justify-center shadow-[0_0_30px_-5px_rgba(219,39,119,0.4)]">
+            <Heart className="text-white fill-white" size={32} />
           </div>
           <div>
-            <h1 className="text-xl font-black text-white tracking-tighter uppercase italic leading-none">Mudae Hub</h1>
-            <p className="text-[11px] font-bold text-pink-500 tracking-[0.3em] uppercase mt-1">Dashboard</p>
+            <h1 className="text-2xl font-black text-white tracking-tighter uppercase italic leading-none">Mudae Hub</h1>
+            <p className="text-[12px] font-bold text-pink-500 tracking-[0.4em] uppercase mt-1">Dashboard</p>
           </div>
         </div>
 
         <nav className="flex-1 space-y-4">
-          <p className="text-[12px] font-black text-slate-600 uppercase tracking-widest ml-2 mb-6">Rollers List</p>
+          <p className="text-[13px] font-black text-slate-600 uppercase tracking-widest ml-2 mb-6">Rollers List</p>
           {Object.keys(profiles).map(name => (
-            <button key={name} onClick={() => setActiveProfile(name)} className={`w-full flex items-center justify-between px-6 py-5 rounded-[20px] text-[15px] font-bold transition-all duration-300 ${activeProfile === name ? 'bg-pink-600 text-white shadow-2xl translate-x-2' : 'text-slate-400 hover:bg-white/5 hover:text-white'}`}>
+            <button key={name} onClick={() => setActiveProfile(name)} className={`w-full flex items-center justify-between px-7 py-5 rounded-[24px] text-[16px] font-bold transition-all duration-300 ${activeProfile === name ? 'bg-pink-600 text-white shadow-2xl translate-x-2' : 'text-slate-400 hover:bg-white/5 hover:text-white'}`}>
               <div className="flex items-center gap-4"><Users size={22}/> {name}</div>
-              {isUnlocked && activeProfile === name && <Trash2 size={18} className="opacity-40 hover:opacity-100" onClick={(e) => { e.stopPropagation(); if(confirm('Delete?')) deleteDoc(doc(db, "profiles", name)); }}/>}
+              {isUnlocked && activeProfile === name && <Trash2 size={20} className="opacity-40 hover:opacity-100 transition-opacity" onClick={(e) => { e.stopPropagation(); if(confirm('Delete?')) deleteDoc(doc(db, "profiles", name)); }}/>}
             </button>
           ))}
-          <button onClick={handleAddRoller} className="w-full border-2 border-dashed border-slate-800 hover:border-pink-600 py-5 rounded-[20px] text-[13px] font-black uppercase text-slate-500 mt-10 transition-colors flex items-center justify-center gap-3">
-            <UserPlus size={20}/> Add New Roller
+          <button onClick={handleAddRoller} className="w-full border-2 border-dashed border-slate-800 hover:border-pink-600 py-6 rounded-[24px] text-[14px] font-black uppercase text-slate-500 mt-10 transition-colors flex items-center justify-center gap-3">
+            <UserPlus size={22}/> Add New Roller
           </button>
         </nav>
       </aside>
 
-      <main className="flex-1 p-8 md:p-20 overflow-y-auto bg-gradient-to-br from-[#0b0f1a] to-[#0f172a]">
-        <header className="flex flex-col xl:flex-row justify-between gap-12 mb-24 items-center">
+      <main className="flex-1 p-10 md:p-20 overflow-y-auto bg-gradient-to-br from-[#0b0f1a] to-[#0f172a]">
+        <header className="flex flex-col xl:flex-row justify-between gap-12 mb-28 items-center">
           <div className="text-center xl:text-left">
-            <h2 className="text-[120px] font-black text-white italic uppercase tracking-tighter leading-none drop-shadow-2xl">{activeProfile || 'Ready'}</h2>
-            <div className="flex gap-8 mt-8 justify-center xl:justify-start items-center">
-              <span className="bg-slate-900 border-2 border-slate-800 px-6 py-2 rounded-full text-[13px] font-black text-slate-400 uppercase tracking-widest">{sortedChars.length} CHARACTERS</span>
+            <h2 className="text-[130px] font-black text-white italic uppercase tracking-tighter leading-none drop-shadow-2xl">{activeProfile || 'Select'}</h2>
+            <div className="flex gap-10 mt-8 justify-center xl:justify-start items-center">
+              <span className="bg-slate-900 border-2 border-slate-800 px-8 py-2.5 rounded-full text-[15px] font-black text-slate-400 uppercase tracking-widest">{sortedChars.length} CHARACTERS</span>
               <div className="flex items-center gap-4">
-                <span className="text-[12px] font-black text-slate-600 uppercase tracking-widest">Sort By:</span>
-                <button onClick={() => setSortMode(sortMode === 'kakera' ? 'name' : 'kakera')} className="text-[14px] font-black text-pink-500 uppercase flex items-center gap-2 hover:scale-105 transition-transform">
-                  <ArrowUpDown size={18}/> {sortMode === 'kakera' ? 'Highest Kakera' : 'A-Z Name'}
+                <span className="text-[13px] font-black text-slate-600 uppercase tracking-widest">Sort By:</span>
+                <button onClick={() => setSortMode(sortMode === 'kakera' ? 'name' : 'kakera')} className="text-[16px] font-black text-pink-500 uppercase flex items-center gap-2 hover:scale-105 transition-transform">
+                  <ArrowUpDown size={22}/> {sortMode === 'kakera' ? 'Highest Kakera' : 'A-Z Name'}
                 </button>
               </div>
             </div>
           </div>
 
           <div className="flex flex-wrap items-center gap-8 justify-center">
-            <div className="bg-slate-900 border-2 border-slate-800 rounded-[30px] flex items-center p-3 shadow-2xl focus-within:border-pink-600 transition-all">
+            <div className="bg-slate-900 border-2 border-slate-800 rounded-[35px] flex items-center p-3.5 shadow-2xl focus-within:border-pink-600 transition-all">
               <input 
                 type="password" 
                 placeholder="ENTER PASSWORD" 
                 value={passwordInput}
-                className="bg-transparent px-6 w-56 text-sm outline-none font-black tracking-[0.2em] text-white placeholder:text-slate-700" 
+                className="bg-transparent px-8 w-64 text-base outline-none font-black tracking-[0.2em] text-white placeholder:text-slate-700" 
                 onChange={(e) => setPasswordInput(e.target.value)} 
               />
-              <button 
-                onClick={handleUnlock} 
-                className={`p-4 rounded-2xl transition-all duration-500 ${isUnlocked ? 'bg-green-500 text-white shadow-lg rotate-[360deg]' : 'bg-slate-800 text-slate-500 hover:text-white'}`}
-              >
-                {isUnlocked ? <Unlock size={24}/> : <Lock size={24}/>}
+              <button onClick={handleUnlock} className={`p-4 rounded-3xl transition-all duration-500 ${isUnlocked ? 'bg-green-500 text-white shadow-lg rotate-[360deg]' : 'bg-slate-800 text-slate-500 hover:text-white'}`}>
+                {isUnlocked ? <Unlock size={28}/> : <Lock size={28}/>}
               </button>
             </div>
-
-            <button 
-              onClick={smartFixer} 
-              disabled={!isUnlocked || isFixing} 
-              className="bg-blue-600 hover:bg-blue-500 disabled:bg-slate-900 disabled:text-slate-700 text-white px-12 py-6 rounded-[30px] text-[14px] font-black uppercase tracking-[0.1em] flex items-center gap-5 shadow-2xl shadow-blue-600/20 active:scale-95 transition-all"
-            >
-              {isFixing ? <RefreshCw size={22} className="animate-spin"/> : <CheckCircle2 size={22}/>}
+            <button onClick={smartFixer} disabled={!isUnlocked || isFixing} className="bg-blue-600 hover:bg-blue-500 disabled:bg-slate-900 disabled:text-slate-700 text-white px-14 py-7 rounded-[35px] text-[16px] font-black uppercase tracking-[0.1em] flex items-center gap-6 shadow-2xl shadow-blue-600/20 transition-all active:scale-95">
+              {isFixing ? <RefreshCw size={26} className="animate-spin"/> : <CheckCircle2 size={26}/>}
               {isFixing ? `SCANNING: ${progress}` : 'Scan Harem'}
             </button>
           </div>
         </header>
 
-        <section className="grid grid-cols-1 lg:grid-cols-4 gap-20">
+        <section className="grid grid-cols-1 lg:grid-cols-4 gap-24">
           <div className="lg:col-span-1">
-            <div className="bg-[#111622]/80 backdrop-blur-2xl border-2 border-slate-800 p-10 rounded-[40px] space-y-10 shadow-2xl sticky top-10">
+            <div className="bg-[#111622]/90 backdrop-blur-3xl border-2 border-slate-800 p-12 rounded-[48px] space-y-12 shadow-2xl sticky top-10">
               <div className="relative">
-                <Search className="absolute left-6 top-6 text-slate-600" size={22}/>
-                <input className="w-full bg-slate-950 border-2 border-slate-800 rounded-[24px] py-6 pl-16 pr-8 text-base outline-none focus:border-pink-500 font-bold transition-all shadow-inner" placeholder="Quick Search..." onChange={(e) => setSearch(e.target.value)} />
+                <Search className="absolute left-7 top-7 text-slate-600" size={26}/>
+                <input className="w-full bg-slate-950 border-2 border-slate-800 rounded-[28px] py-7 pl-20 pr-10 text-lg outline-none focus:border-pink-500 font-bold transition-all shadow-inner" placeholder="Quick Search..." onChange={(e) => setSearch(e.target.value)} />
               </div>
               <div className="space-y-6">
-                <p className="text-[12px] font-black text-slate-500 uppercase tracking-widest ml-2">Import Mudae Data</p>
-                <textarea className="w-full bg-slate-950 border-2 border-slate-800 rounded-[24px] p-6 text-[12px] h-64 outline-none font-mono focus:border-pink-600 text-pink-500 shadow-inner" placeholder="$mms l- k" value={inputText} onChange={(e) => setInputText(e.target.value)} />
-                <button onClick={handleImport} disabled={!isUnlocked} className="w-full bg-pink-600 hover:bg-pink-500 py-6 rounded-[24px] text-[14px] font-black text-white uppercase tracking-widest shadow-2xl shadow-pink-600/40 active:scale-95 transition-all">Import Chars</button>
+                <p className="text-[14px] font-black text-slate-500 uppercase tracking-widest ml-3">Import Mudae Data</p>
+                <textarea className="w-full bg-slate-950 border-2 border-slate-800 rounded-[28px] p-7 text-[13px] h-72 outline-none font-mono focus:border-pink-600 text-pink-500 shadow-inner" placeholder="$mms l- k" value={inputText} onChange={(e) => setInputText(e.target.value)} />
+                <button onClick={handleImport} disabled={!isUnlocked} className="w-full bg-pink-600 hover:bg-pink-500 py-7 rounded-[28px] text-[16px] font-black text-white uppercase tracking-widest shadow-2xl shadow-pink-600/40 active:scale-95 transition-all">Import Chars</button>
               </div>
             </div>
           </div>
-          <div className="lg:col-span-3 grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-8 md:gap-10">
+          <div className="lg:col-span-3 grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-10 md:gap-12">
             {sortedChars.map((c) => (
-              <CharacterCard 
-                key={c.id} 
-                char={c} 
-                isUnlocked={isUnlocked} 
-                onDelete={(char) => updateDoc(doc(db, "profiles", activeProfile), { characters: arrayRemove(char) })} 
-                onToggleTrade={(s) => {
+              <CharacterCard key={c.id} char={c} isUnlocked={isUnlocked} onDelete={(char) => updateDoc(doc(db, "profiles", activeProfile), { characters: arrayRemove(char) })} onToggleTrade={(s) => {
                   const t = profiles[activeProfile]?.tradeTags?.includes(s);
                   updateDoc(doc(db, "profiles", activeProfile), { tradeTags: t ? arrayRemove(s) : arrayUnion(s) });
-                }} 
-                isTagged={profiles[activeProfile]?.tradeTags?.includes(c.series)} 
+                }} isTagged={profiles[activeProfile]?.tradeTags?.includes(c.series)} 
               />
             ))}
           </div>
