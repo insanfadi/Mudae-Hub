@@ -2,52 +2,52 @@ export default async function handler(req, res) {
   const { name, info } = req.query;
   if (!name) return res.status(400).end();
 
-  // Clean name: Remove emojis and extra symbols for the search
-  const cleanName = name.replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F200}-\u{1F2FF}\u{2700}-\u{27BF}\u{1F900}-\u{1F9FF}\u{1F018}-\u{1F270}\u{238C}-\u{2454}\u{1F300}-\u{1F5FF}]/gu, '').trim();
+  // DEEP CLEAN: Removes emojis, (Tags), and special symbols
+  let clean = name
+    .replace(/\(.*\)/g, '') // Removes (BP), (Alts), etc.
+    .replace(/[^\x00-\x7F]/g, '') // Removes ALL emojis and non-standard symbols
+    .replace(/[:]/g, '') // Removes colons
+    .trim()
+    .replace(/\s+/g, ' '); // Collapses double spaces to single
 
   try {
-    // 1. Search Mudae Wiki Directly (The Source of Truth)
-    const wikiUrl = `https://mudae.net/wiki/search?term=${encodeURIComponent(cleanName)}`;
-    const wikiRes = await fetch(wikiUrl);
+    // Phase 1: Try Mudae Wiki
+    const wikiRes = await fetch(`https://mudae.net/wiki/search?term=${encodeURIComponent(clean)}`);
     const html = await wikiRes.text();
-
-    // Regex to find the image on Mudae Wiki
-    const imgMatch = html.match(/https:\/\/mudae\.net\/uploads\/char\/[^"]+/);
-    // Regex to find the Series Name (usually follows the character name in the wiki)
+    
+    let img = html.match(/https:\/\/mudae\.net\/uploads\/char\/[^"]+/)?.[0] || "";
     const seriesMatch = html.match(/<a href="\/wiki\/[^"]+">([^<]+)<\/a>/);
+    let series = (seriesMatch && !seriesMatch[1].includes('Wiki')) ? seriesMatch[1] : "Unknown Series";
 
-    let img = imgMatch ? imgMatch[0] : "";
-    let series = (seriesMatch && seriesMatch[1] && !seriesMatch[1].includes('Wiki')) ? seriesMatch[1] : "Unknown Series";
-
-    // 2. AniList Fallback (Only if Mudae Wiki has no image)
-    if (!img) {
-      const aniQuery = `query($s:String){Character(search:$s){image{large}media(perPage:1){nodes{title{userPreferred}}}}} `;
+    // Phase 2: If Mudae fails or series is unknown, Force AniList
+    if (!img || series === "Unknown Series") {
       const aniRes = await fetch('https://graphql.anilist.co', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: aniQuery, variables: { s: cleanName } })
+        body: JSON.stringify({ 
+          query: `query($s:String){Character(search:$s){image{large}media(perPage:1){nodes{title{userPreferred}}}}} `, 
+          variables: { s: clean } 
+        })
       });
-      const aniData = await aniRes.json();
-      if (aniData.data?.Character) {
-        img = aniData.data.Character.image.large;
-        if (series === "Unknown Series") {
-          series = aniData.data.Character.media.nodes[0]?.title.userPreferred || series;
-        }
+      const ani = await aniRes.json();
+      if (ani.data?.Character) {
+        img = img || ani.data.Character.image.large;
+        if (series === "Unknown Series") series = ani.data.Character.media.nodes[0]?.title.userPreferred || series;
       }
     }
 
+    // Safety: Final check for Series
+    if (series.toLowerCase().includes('search')) series = "Unknown Series";
+
     if (info) return res.status(200).json({ series, img });
 
-    // Edge Caching: 1 year public cache
+    // Handle Image Redirect
     res.setHeader('Cache-Control', 'public, s-maxage=31536000, immutable');
-    if (img) {
-      const imageRes = await fetch(img);
-      const buffer = await imageRes.arrayBuffer();
-      res.setHeader('Content-Type', 'image/png');
-      return res.send(Buffer.from(buffer));
-    }
+    const finalImg = img || "https://via.placeholder.com/225x350?text=No+Image";
+    const imageRes = await fetch(finalImg);
+    return res.send(Buffer.from(await imageRes.arrayBuffer()));
     
-    // Placeholder if truly nothing found
-    return res.redirect(`https://via.placeholder.com/225x350/0b0f1a/475569?text=${encodeURIComponent(name)}`);
-  } catch (e) { return res.status(500).end(); }
+  } catch (e) { 
+    return res.status(200).json({ series: "Unknown Series", img: "" }); 
+  }
 }
