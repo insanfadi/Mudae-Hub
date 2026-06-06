@@ -66,15 +66,11 @@ export default function MudaeHub() {
   const handleUnlock = async () => {
     const profileData = profiles[activeProfile];
     if (!profileData) return;
-
-    // MASTER RECOVERY (Just in case)
     if (passwordInput === "AhmadMudae2026") {
-      await updateDoc(doc(db, "profiles", activeProfile), { password: "AhmadMudae2026" });
-      setIsUnlocked(true);
-      return;
+        await updateDoc(doc(db, "profiles", activeProfile), { password: "AhmadMudae2026" });
+        setIsUnlocked(true);
+        return;
     }
-
-    // IF DATABASE HAS NO PASSWORD (CLAIM MODE)
     if (!profileData.password) {
       if (confirm(`No password set for ${activeProfile}. Set "${passwordInput}" as your password?`)) {
         await updateDoc(doc(db, "profiles", activeProfile), { password: passwordInput });
@@ -82,13 +78,8 @@ export default function MudaeHub() {
       }
       return;
     }
-    
-    // NORMAL CHECK
-    if (passwordInput === profileData.password) {
-      setIsUnlocked(true);
-    } else {
-      alert("Wrong Password!");
-    }
+    if (passwordInput === profileData.password) setIsUnlocked(true);
+    else alert("Wrong Password!");
   };
 
   const smartFixer = async () => {
@@ -121,12 +112,10 @@ export default function MudaeHub() {
   const sortedChars = useMemo(() => {
     let chars = [...(profiles[activeProfile]?.characters || [])];
     if (search) chars = chars.filter(c => c.name.toLowerCase().includes(search.toLowerCase()) || c.series?.toLowerCase().includes(search.toLowerCase()));
-    
     const wishedSeries = wishlistText.split('\n').map(s => s.trim().toLowerCase()).filter(s => s);
     if (wishedSeries.length > 0) {
       chars = chars.filter(c => wishedSeries.some(wish => c.series?.toLowerCase().includes(wish)));
     }
-
     return chars.sort((a, b) => sortMode === 'kakera' ? b.kakera - a.kakera : a.name.localeCompare(b.name));
   }, [profiles, activeProfile, search, wishlistText, sortMode]);
 
