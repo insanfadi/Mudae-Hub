@@ -29,8 +29,18 @@ export default async function handler(req, res) {
     // SEARCH STRATEGY (Tested for Angel-chan):
     // 1. Search name exactly (e.g. "OMGkawaiiAngel-chan")
     // 2. Search name with a space (e.g. "OMGkawaii Angel-chan")
+    // 3. Search name without honorifics (e.g. "OMGkawaiiAngel")
+    // 4. Search name without honorifics and with a space (e.g. "OMGkawaii Angel")
     let charData = await fetchAniList(cleanName);
     if (!charData) charData = await fetchAniList(cleanName.replace(/([a-z])([A-Z])/g, '$1 $2'));
+
+    if (!charData) {
+      const noHonorific = cleanName.replace(/[\s-]?(chan|kun|san|sama|dono|senpai|sensei)$/i, '');
+      if (noHonorific !== cleanName) {
+        charData = await fetchAniList(noHonorific);
+        if (!charData) charData = await fetchAniList(noHonorific.replace(/([a-z])([A-Z])/g, '$1 $2'));
+      }
+    }
 
     if (charData) {
       img = charData.image.large;
@@ -46,9 +56,14 @@ export default async function handler(req, res) {
       : img;
 
     const imageRes = await fetch(finalImg, { headers });
+    if (!imageRes.ok) {
+      return res.redirect(`https://via.placeholder.com/225x350?text=Image+Fetch+Failed`);
+    }
+    
+    const contentType = imageRes.headers.get('content-type') || 'image/jpeg';
     const buffer = Buffer.from(await imageRes.arrayBuffer());
     
-    res.setHeader('Content-Type', 'image/jpeg');
+    res.setHeader('Content-Type', contentType);
     res.setHeader('Cache-Control', 'public, s-maxage=31536000, immutable');
     return res.send(buffer);
 
