@@ -31,9 +31,7 @@ const CharacterCard = React.memo(({ char, isUnlocked, onToggleTrade, onDelete, i
         </button>
       </div>
       <div className="p-6 bg-[#161b29] z-20">
-        {/* KEPT AT 20PX AS REQUESTED */}
         <h4 className="text-[20px] font-bold text-white truncate uppercase tracking-tight leading-tight mb-1">{char.name}</h4>
-        {/* KEPT AT 14PX AS REQUESTED */}
         <p className={`text-[14px] truncate font-black uppercase tracking-widest ${char.series?.toLowerCase().includes('unknown') ? 'text-red-500' : 'text-slate-500'}`}>
           {char.series || 'Unknown'}
         </p>
@@ -79,8 +77,10 @@ export default function MudaeHub() {
   const smartFixer = async () => {
     if (!isUnlocked || isFixing) return;
     const allChars = [...(profiles[activeProfile]?.characters || [])];
+    // ONLY SCAN BROKEN ONES (Saves 30 minutes of waiting!)
     const targets = allChars.filter(c => !c.series || c.series.toLowerCase().includes('unknown'));
-    if (targets.length === 0) return alert("Harem is fixed!");
+    if (targets.length === 0) return alert("Harem is already fully scanned!");
+
     setIsFixing(true); setTotalToFix(targets.length); setProgress(0);
     const BATCH_SIZE = 3; 
     for (let i = 0; i < targets.length; i += BATCH_SIZE) {
@@ -137,7 +137,6 @@ export default function MudaeHub() {
       <main className="flex-1 p-8 md:p-16 overflow-y-auto bg-gradient-to-br from-[#0b0f1a] to-[#0f172a]">
         <header className="flex flex-col xl:flex-row justify-between gap-10 mb-20 items-center">
           <div className="text-center xl:text-left">
-            {/* SHRUNK AHMAD TO 7XL */}
             <h2 className="text-7xl font-black text-white italic uppercase tracking-tighter leading-none drop-shadow-2xl">{activeProfile || 'Select'}</h2>
             <div className="flex gap-8 mt-6 justify-center xl:justify-start items-center">
               <span className="bg-slate-900 border-2 border-slate-800 px-6 py-2 rounded-full text-[14px] font-black text-slate-400 uppercase tracking-widest">{sortedChars.length} CHARS</span>
@@ -151,13 +150,16 @@ export default function MudaeHub() {
           </div>
 
           <div className="flex flex-wrap items-center gap-6 justify-center">
-            {/* SHRUNK PASSWORD INPUT */}
             <div className="bg-slate-900 border-2 border-slate-800 rounded-[28px] flex items-center p-2.5 shadow-2xl focus-within:border-pink-600 transition-all">
               <input type="password" placeholder="PASSWORD" value={passwordInput} className="bg-transparent px-6 w-48 text-sm outline-none font-black tracking-[0.2em] text-white placeholder:text-slate-700" onChange={(e) => setPasswordInput(e.target.value)} />
               <button onClick={handleUnlock} className={`p-3.5 rounded-2xl transition-all duration-500 ${isUnlocked ? 'bg-green-500 text-white shadow-lg rotate-[360deg]' : 'bg-slate-800 text-slate-500 hover:text-white'}`}><Unlock size={24}/></button>
             </div>
-            {/* SHRUNK SCAN BUTTON */}
-            <button onClick={smartFixer} disabled={!isUnlocked || isFixing} className="bg-blue-600 hover:bg-blue-500 disabled:bg-slate-900 text-white px-10 py-4.5 rounded-[28px] text-[15px] font-black uppercase tracking-[0.1em] flex items-center gap-5 shadow-2xl shadow-blue-600/20 active:scale-95 transition-all">
+            {/* FIXED SCAN HAREM BUTTON SIZE */}
+            <button 
+              onClick={smartFixer} 
+              disabled={!isUnlocked || isFixing} 
+              className="bg-blue-600 hover:bg-blue-500 disabled:bg-slate-900 text-white px-14 py-5 rounded-[32px] text-[16px] font-black uppercase tracking-widest flex items-center gap-6 shadow-2xl shadow-blue-600/20 active:scale-95 transition-all min-w-[240px] justify-center"
+            >
               {isFixing ? <RefreshCw size={22} className="animate-spin"/> : <CheckCircle2 size={22}/>}
               {isFixing ? `FIXING: ${Math.min(progress, totalToFix)} / ${totalToFix}` : 'Scan Harem'}
             </button>
@@ -166,7 +168,6 @@ export default function MudaeHub() {
 
         <section className="grid grid-cols-1 lg:grid-cols-4 gap-16">
           <div className="lg:col-span-1">
-            {/* COMPACT IMPORT BOX */}
             <div className="bg-[#111622]/90 backdrop-blur-3xl border-2 border-slate-800 p-8 rounded-[32px] space-y-8 shadow-2xl sticky top-10">
               <div className="relative">
                 <Search className="absolute left-6 top-6 text-slate-600" size={22}/>
