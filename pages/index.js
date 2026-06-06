@@ -10,11 +10,13 @@ const CharacterCard = React.memo(({ char, isUnlocked, onToggleTrade, onDelete, i
       <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-transparent to-transparent opacity-80" />
       <div className="absolute top-2 left-2 bg-black/70 px-2 py-0.5 rounded text-[10px] font-black text-orange-400 border border-white/5">{char.kakera.toLocaleString()}</div>
       {isUnlocked && <button onClick={() => onDelete(char)} className="absolute top-2 right-2 p-1.5 bg-red-600 text-white rounded-lg opacity-0 group-hover:opacity-100 transition-all"><X size={14}/></button>}
-      <button onClick={() => onToggleTrade(char.series)} className={`absolute bottom-3 right-3 p-2.5 rounded-xl backdrop-blur-md transition-all ${isTagged ? 'bg-green-500 text-white shadow-lg' : 'bg-white/5 text-white/30'}`}><Tag size={12}/></button>
+      <button onClick={() => onToggleTrade(char.series)} className={`absolute bottom-3 right-3 p-2.5 rounded-xl backdrop-blur-md transition-all ${isTagged ? 'bg-green-500 text-white shadow-lg' : 'bg-white/5 text-white/30 hover:bg-white/10'}`}><Tag size={12}/></button>
     </div>
     <div className="p-3">
-      <h4 className="text-[11px] font-black text-white truncate uppercase tracking-tight">{char.name}</h4>
-      <p className="text-[9px] text-slate-500 truncate font-bold uppercase mt-0.5">{char.series || 'Unknown'}</p>
+      <h4 className="text-[10px] font-black text-white truncate uppercase tracking-tighter">{char.name}</h4>
+      <p className={`text-[8px] truncate font-bold uppercase mt-0.5 ${char.series?.toLowerCase().includes('unknown') ? 'text-red-500' : 'text-slate-500'}`}>
+        {char.series || 'Unknown'}
+      </p>
     </div>
   </div>
 ));
@@ -47,6 +49,7 @@ export default function MudaeHub() {
     setIsFixing(true);
     setProgress(0);
 
+    // Parallel batches of 5
     for (let i = 0; i < targets.length; i += 5) {
       const batch = targets.slice(i, i + 5);
       await Promise.all(batch.map(async (char) => {
@@ -54,12 +57,14 @@ export default function MudaeHub() {
           const res = await fetch(`/api/mudae?name=${encodeURIComponent(char.name)}&info=true`);
           const data = await res.json();
           const match = all.find(c => c.id === char.id);
-          if (match && data.series && !data.series.toLowerCase().includes('unknown')) match.series = data.series;
+          if (match && data.series && !data.series.toLowerCase().includes('unknown')) {
+            match.series = data.series;
+          }
         } catch (e) {}
       }));
       setProgress(i + batch.length);
-      if (i % 25 === 0) await updateDoc(doc(db, "profiles", activeProfile), { characters: all });
-      await new Promise(r => setTimeout(r, 600)); // Stay safe from ban
+      if (i % 20 === 0) await updateDoc(doc(db, "profiles", activeProfile), { characters: all });
+      await new Promise(r => setTimeout(r, 1000)); 
     }
     await updateDoc(doc(db, "profiles", activeProfile), { characters: all });
     setIsFixing(false);
@@ -88,7 +93,7 @@ export default function MudaeHub() {
         <div className="flex items-center gap-3 mb-6"><div className="w-10 h-10 bg-pink-600 rounded-xl flex items-center justify-center text-white font-black italic shadow-lg shadow-pink-600/30 text-xl">M</div><h1 className="text-sm font-black text-white tracking-[0.2em] uppercase italic">Mudae Hub</h1></div>
         <nav className="space-y-2">
           {Object.keys(profiles).map(name => (
-            <button key={name} onClick={() => setActiveProfile(name)} className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-xs font-black transition-all ${activeProfile === name ? 'bg-pink-600 text-white shadow-xl translate-x-2' : 'text-slate-400 hover:bg-white/5'}`}>
+            <button key={name} onClick={() => setActiveProfile(name)} className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-xs font-black transition-all ${activeProfile === name ? 'bg-pink-600 text-white shadow-xl' : 'text-slate-400 hover:bg-white/5'}`}>
               <div className="flex items-center gap-3 uppercase tracking-tighter"><Users size={14}/> {name}</div>
               {isUnlocked && activeProfile === name && <Trash2 size={14} className="opacity-40 hover:opacity-100" onClick={(e) => { e.stopPropagation(); if(confirm('Delete?')) deleteDoc(doc(db, "profiles", name)); }}/>}
             </button>
@@ -101,7 +106,7 @@ export default function MudaeHub() {
         <header className="flex flex-col xl:flex-row justify-between gap-8 mb-16 items-center">
           <div><h2 className="text-7xl font-black text-white italic uppercase tracking-tighter leading-none text-center xl:text-left">{activeProfile}</h2><div className="flex gap-4 mt-4 justify-center xl:justify-start"><span className="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em]">{sortedChars.length} CHARS</span><button onClick={() => setSortMode(sortMode === 'kakera' ? 'name' : 'kakera')} className="text-[10px] font-black text-pink-500 uppercase tracking-[0.3em] flex items-center gap-2 transition-transform active:scale-95"><ArrowUpDown size={10}/> SORT: {sortMode}</button></div></div>
           <div className="flex flex-wrap items-center gap-4 justify-center">
-            <div className="bg-slate-900 border border-slate-800 rounded-2xl flex p-2 shadow-2xl"><input type="password" placeholder="PIN" className="bg-transparent px-3 w-16 text-xs outline-none font-bold" onChange={(e) => setPin(e.target.value)} /><button onClick={() => setIsUnlocked(pin === "1234")} className={`p-2.5 rounded-xl transition-all ${isUnlocked ? 'bg-green-500 text-white shadow-lg' : 'text-slate-600 hover:bg-white/5'}`}>{isUnlocked ? <Unlock size={18}/> : <Lock size={18}/>}</button></div>
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl flex p-2 shadow-2xl"><input type="password" placeholder="PIN" className="bg-transparent px-3 w-16 text-xs outline-none font-bold" onChange={(e) => setPin(e.target.value)} /><button onClick={() => setIsUnlocked(pin === "1234")} className={`p-2.5 rounded-xl transition-all ${isUnlocked ? 'text-green-500 text-white shadow-lg' : 'text-slate-600 hover:bg-white/5'}`}>{isUnlocked ? <Unlock size={18}/> : <Lock size={18}/>}</button></div>
             <button onClick={smartFixer} disabled={!isUnlocked || isFixing} className="bg-blue-600 hover:bg-blue-500 disabled:bg-slate-800 text-white px-8 py-4 rounded-2xl text-[11px] font-black uppercase tracking-widest flex items-center gap-3 transition-all shadow-xl shadow-blue-500/20 active:scale-95">{isFixing ? <RefreshCw size={16} className="animate-spin"/> : <CheckCircle2 size={16}/>} {isFixing ? `FIXING: ${progress}` : 'Smart Sync Harem'}</button>
           </div>
         </header>
