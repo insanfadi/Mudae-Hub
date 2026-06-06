@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { db } from '../lib/firebase';
 import { doc, setDoc, onSnapshot, collection, updateDoc, arrayUnion, arrayRemove, deleteDoc } from 'firebase/firestore';
-import { Search, Lock, Unlock, Tag, Trash2, X, RefreshCw, Users, CheckCircle2, ArrowUpDown, UserPlus, Heart, Star, Zap, Gem, Key } from 'lucide-react';
+import { Search as SearchIcon, Lock, Unlock, Tag, Trash2, X, RefreshCw, Users, CheckCircle2, ArrowUpDown, UserPlus, Heart, Star, Zap, Gem, Key } from 'lucide-react';
 
 const CharacterCard = React.memo(({ char, isUnlocked, onToggleTrade, onDelete, isTagged }) => {
   const [imgError, setImgError] = useState(false);
@@ -12,19 +12,23 @@ const CharacterCard = React.memo(({ char, isUnlocked, onToggleTrade, onDelete, i
       <div className="aspect-[2/3] relative overflow-hidden bg-[#0b0f1a]">
         <img src={imgError ? `https://via.placeholder.com/225x350?text=Reloading` : imgUrl} alt={char.name} className="w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-110" onError={() => setImgError(true)} loading="lazy" />
         <div className="absolute inset-0 bg-gradient-to-t from-[#0b0f1a] via-transparent to-transparent opacity-90" />
-        <div className="absolute top-4 left-4 bg-black/80 backdrop-blur-xl px-3 py-1.5 rounded-xl text-[13px] font-black text-orange-400 border border-white/10 shadow-2xl z-10 flex items-center gap-1.5">
+        
+        <div className="absolute top-4 left-4 bg-black/80 backdrop-blur-xl px-3 py-1 rounded-xl text-[13px] font-black text-orange-400 border border-white/10 shadow-2xl z-10 flex items-center gap-1.5">
           <Gem size={12} className="text-orange-400 fill-orange-400/20" />
           {char.kakera?.toLocaleString()}
         </div>
+
         {char.keys > 0 && (
           <div className="absolute top-4 right-4 bg-yellow-500/90 backdrop-blur-md px-3 py-1.5 rounded-xl text-[13px] font-black text-black shadow-2xl z-10 flex items-center gap-1.5">
             <Key size={12} className="fill-black" />
             {char.keys}
           </div>
         )}
+
         {isUnlocked && <button onClick={() => onDelete(char)} className="absolute top-4 right-4 p-2.5 bg-red-600 hover:bg-red-500 text-white rounded-2xl opacity-0 group-hover:opacity-100 transition-all shadow-xl z-30"><X size={20}/></button>}
         <button onClick={() => onToggleTrade(char.id)} className={`absolute bottom-5 right-5 p-4 rounded-[20px] backdrop-blur-xl transition-all z-20 ${isTagged ? 'bg-pink-600 text-white shadow-pink-600/50 shadow-lg scale-110' : 'bg-white/5 text-white/20 hover:bg-white/10'}`}><Tag size={22}/></button>
       </div>
+
       <div className="p-6 bg-[#161b29] z-20">
         <div className="flex items-center gap-2">
            <h4 className="text-[20px] font-bold text-white truncate uppercase tracking-tight leading-tight mb-1">{char.name}</h4>
@@ -45,6 +49,7 @@ export default function MudaeHub() {
   const [wishlistText, setWishlistText] = useState('');
   const [passwordInput, setPasswordInput] = useState('');
   const [isUnlocked, setIsUnlocked] = useState(false);
+  const [query, setQuery] = useState(''); // Renamed to query to avoid build conflict
   const [isFixing, setIsFixing] = useState(false);
   const [progress, setProgress] = useState(0);
   const [totalToFix, setTotalToFix] = useState(0);
@@ -83,7 +88,7 @@ export default function MudaeHub() {
           const res = await fetch(`/api/mudae?name=${encodeURIComponent(char.name)}&series=${encodeURIComponent(char.series)}&info=true`);
           const data = await res.json();
           const idx = allChars.findIndex(c => c.id === char.id);
-          if (idx !== -1 && data.img) { allChars[idx].gender = data.gender; }
+          if (idx !== -1 && data.img) { allChars[idx].gender = data.gender; if (!allChars[idx].series || allChars[idx].series === 'Unknown') allChars[idx].series = data.series; }
         } catch (e) {}
       }));
       setProgress(i + batch.length);
@@ -94,7 +99,6 @@ export default function MudaeHub() {
     setIsFixing(false);
   };
 
-  // --- THE NEW TESTED "CONTEXT" PARSER ---
   const handleImport = async () => {
     if (!isUnlocked) return alert("Unlock First!");
     const lines = inputText.split('\n');
@@ -105,52 +109,37 @@ export default function MudaeHub() {
       const l = line.trim();
       if (!l || l.includes('Click to react') || l.includes('PM]') || l.includes('AM]')) return;
 
-      // 1. Check if it's a Series Header: "Title - 13/29"
       const seriesHeaderMatch = l.match(/^(.+?)\s*-\s*\d+\/\d+/);
       if (seriesHeaderMatch) {
         currentSeries = seriesHeaderMatch[1].trim();
         return;
       }
 
-      // 2. Check if it's a Character Line: "#Rank - Name..."
       if (l.startsWith('#')) {
         const rankMatch = l.match(/#([\d,]+)/);
         const kakeraMatch = l.match(/([\d,]+)\s*ka/);
-        const keysMatch = l.match(/\((\d+)\)/); // Captures (4) or (2)
-
+        const keysMatch = l.match(/\((\d+)\)/);
         if (kakeraMatch) {
-          // Extract Name: string between "#Rank - " and the first Bullet or Kakera number
           let namePart = l.replace(/#[\d,]+ - /, '');
-          // Remove anything from the bullet point onwards or the kakera number
           let name = namePart.split(' · ')[0].split(/[\d,]+\s*ka/)[0].trim();
-
-          newCharacters.push({
-            id: Math.random().toString(36).substr(2, 9),
-            name: name,
-            series: currentSeries,
-            kakera: parseInt(kakeraMatch[1].replace(/,/g, '')),
-            rank: rankMatch ? rankMatch[1] : null,
-            keys: keysMatch ? parseInt(keysMatch[1]) : 0,
-            gender: "none"
-          });
+          newCharacters.push({ id: Math.random().toString(36).substr(2, 9), name, series: currentSeries, kakera: parseInt(kakeraMatch[1].replace(/,/g, '')), rank: rankMatch ? rankMatch[1] : null, keys: keysMatch ? parseInt(keysMatch[1]) : 0, gender: "none" });
         }
       }
     });
 
-    if (newCharacters.length === 0) return alert("No valid characters found in text!");
-
+    if (newCharacters.length === 0) return alert("No valid characters found!");
     await updateDoc(doc(db, "profiles", activeProfile), { characters: arrayUnion(...newCharacters) });
     setInputText('');
-    alert(`Successfully imported ${newCharacters.length} characters!`);
+    alert(`Imported ${newCharacters.length} characters!`);
   };
 
   const sortedChars = useMemo(() => {
     let chars = [...(profiles[activeProfile]?.characters || [])];
-    if (search) chars = chars.filter(c => c.name.toLowerCase().includes(search.toLowerCase()) || c.series?.toLowerCase().includes(search.toLowerCase()));
+    if (query) chars = chars.filter(c => c.name.toLowerCase().includes(query.toLowerCase()) || c.series?.toLowerCase().includes(query.toLowerCase()));
     const wishedSeries = wishlistText.split('\n').map(s => s.trim().toLowerCase()).filter(s => s);
     if (wishedSeries.length > 0) chars = chars.filter(c => wishedSeries.some(wish => c.series?.toLowerCase().includes(wish)));
     return chars.sort((a, b) => sortMode === 'kakera' ? b.kakera - a.kakera : a.name.localeCompare(b.name));
-  }, [profiles, activeProfile, search, wishlistText, sortMode]);
+  }, [profiles, activeProfile, query, wishlistText, sortMode]);
 
   const totalValue = useMemo(() => sortedChars.reduce((sum, c) => sum + (c.kakera || 0), 0), [sortedChars]);
 
@@ -198,11 +187,11 @@ export default function MudaeHub() {
               <button type="submit" className={`p-3.5 rounded-2xl transition-all duration-500 ${isUnlocked ? 'bg-green-500 text-white shadow-lg rotate-[360deg]' : 'bg-slate-800 text-slate-500 hover:text-white'}`}><Unlock size={24}/></button>
             </form>
             <div className="flex flex-col gap-3">
-              <button onClick={() => smartFixer(false)} disabled={!isUnlocked || isFixing} className="bg-blue-600 hover:bg-blue-500 disabled:bg-slate-900 text-white px-10 py-5 rounded-[32px] text-[16px] font-black uppercase tracking-widest flex items-center gap-6 shadow-2xl active:scale-95 transition-all min-w-[240px] justify-center">
+              <button onClick={() => smartFixer(false)} disabled={!isUnlocked || isFixing} className="bg-blue-600 hover:bg-blue-500 disabled:bg-slate-900 text-white px-14 py-5 rounded-[32px] text-[16px] font-black uppercase tracking-widest flex items-center gap-6 shadow-2xl shadow-blue-600/20 active:scale-95 transition-all min-w-[240px] justify-center">
                 {isFixing ? <RefreshCw size={22} className="animate-spin"/> : <CheckCircle2 size={22}/>}
                 {isFixing ? `FIXING: ${progress}` : 'Scan Harem'}
               </button>
-              {isUnlocked && !isFixing && <button onClick={() => {if(confirm('Refresh ALL images?')) smartFixer(true)}} className="bg-slate-900/50 border-2 border-pink-600/20 hover:border-pink-600/60 text-[11px] font-black text-slate-400 hover:text-pink-500 uppercase py-3 rounded-[20px] flex items-center justify-center gap-3 transition-all tracking-widest"><Zap size={14}/> FULL RESCAN</button>}
+              {isUnlocked && !isFixing && <button onClick={() => {if(confirm('Full Rescan ALL characters?')) smartFixer(true)}} className="bg-slate-900/50 border-2 border-pink-600/20 hover:border-pink-600/60 text-[11px] font-black text-slate-400 hover:text-pink-500 uppercase py-3 rounded-[20px] flex items-center justify-center gap-3 transition-all tracking-widest"><Zap size={14}/> FULL RESCAN</button>}
             </div>
           </div>
         </header>
@@ -210,23 +199,6 @@ export default function MudaeHub() {
         <section className="grid grid-cols-1 lg:grid-cols-4 gap-12">
           <div className="lg:col-span-1 space-y-8">
             <div className="bg-[#111622]/90 backdrop-blur-3xl border-2 border-slate-800 p-8 rounded-[32px] space-y-8 shadow-2xl sticky top-10">
-              <div className="relative"><Search className="absolute left-6 top-6 text-slate-600" size={22}/><input className="w-full bg-slate-950 border-2 border-slate-800 rounded-[20px] py-5 pl-16 pr-8 text-base outline-none focus:border-pink-500 font-bold transition-all shadow-inner" placeholder="Quick Search..." onChange={(e) => setSearch(e.target.value)} /></div>
-              <div className="space-y-4">
-                <div className="flex items-center gap-2 ml-2"><Star size={14} className="text-orange-500 fill-orange-500"/><p className="text-[12px] font-black text-slate-500 uppercase tracking-widest">Wishlist Search</p></div>
-                <textarea className="w-full bg-slate-950 border-2 border-slate-800 rounded-[20px] p-5 text-[13px] h-40 outline-none font-mono focus:border-orange-500 text-orange-400 shadow-inner" placeholder="Series names..." value={wishlistText} onChange={(e) => setWishlistText(e.target.value)} />
-              </div>
-              <div className="space-y-4 border-t border-slate-800 pt-8">
-                <p className="text-[12px] font-black text-slate-500 uppercase tracking-widest ml-2">Import Data</p>
-                <textarea className="w-full bg-slate-950 border-2 border-slate-800 rounded-[20px] p-5 text-[13px] h-32 outline-none font-mono focus:border-pink-600 text-pink-500 shadow-inner" placeholder="$mmsl-ky+a" value={inputText} onChange={(e) => setInputText(e.target.value)} />
-                <button onClick={handleImport} disabled={!isUnlocked} className="w-full bg-pink-600 hover:bg-pink-500 py-5 rounded-[20px] text-[15px] font-black text-white uppercase shadow-2xl transition-all">Import Chars</button>
-              </div>
-            </div>
-          </div>
-          <div className="lg:col-span-3 grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-10">
-            {sortedChars.map((c) => (<CharacterCard key={c.id} char={c} isUnlocked={isUnlocked} onDelete={(char) => updateDoc(doc(db, "profiles", activeProfile), { characters: arrayRemove(char) })} onToggleTrade={(cid) => { const currentTags = profiles[activeProfile]?.tradeTags || []; const isTagged = currentTags.includes(cid); updateDoc(doc(db, "profiles", activeProfile), { tradeTags: isTagged ? arrayRemove(cid) : arrayUnion(cid) }); }} isTagged={profiles[activeProfile]?.tradeTags?.includes(c.id)} />))}
-          </div>
-        </section>
-      </main>
-    </div>
-  );
-}
+              <div className="relative">
+                <SearchIcon className="absolute left-6 top-6 text-slate-600" size={22}/>
+                <input className="w-full bg-slate-950 border-2 border-slate-800 rounded-[20px] py-5 pl-16 pr-8 text-base outline-none focus:border-pink-500 font-bold transition-all shadow-inner" placeholder="Quick Search..." onChange={(e) => setQuery(e.target.value)} />
