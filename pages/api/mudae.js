@@ -2,20 +2,13 @@ export default async function handler(req, res) {
   const { name, info } = req.query;
   if (!name) return res.status(400).end();
 
-  // Search-specific cleaning (removes emojis and (BP) tags for the API search only)
-  const clean = name
-    .replace(/\(.*\)/g, '')          
-    .replace(/[^\x00-\x7F]/gu, '')   
-    .trim()
-    .replace(/\s+/g, ' ');
-
+  const clean = name.replace(/\(.*\)/g, '').replace(/[^\x00-\x7F]/gu, '').trim().replace(/\s+/g, ' ');
   const headers = { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0 Safari/537.36' };
 
   try {
     let img = "";
     let series = "Unknown Series";
 
-    // 1. ANILIST (Priority for speed)
     try {
       const aniRes = await fetch('https://graphql.anilist.co', {
         method: 'POST',
@@ -32,7 +25,6 @@ export default async function handler(req, res) {
       }
     } catch (e) {}
 
-    // 2. MAL FALLBACK (For accuracy if AniList fails)
     if (!img || series === "Unknown Series") {
       try {
         const jikanRes = await fetch(`https://api.jikan.moe/v4/characters?q=${encodeURIComponent(clean)}&limit=1`, { headers });
@@ -51,18 +43,10 @@ export default async function handler(req, res) {
 
     if (info) return res.status(200).json({ series, img });
 
-    // IMAGE PROXY (Bypasses MAL logo and hotlink protection)
-    const finalImg = (!img || img.includes('questionmark')) 
-      ? `https://via.placeholder.com/225x350?text=${encodeURIComponent(clean)}` 
-      : img;
-      
+    const finalImg = (!img || img.includes('questionmark')) ? `https://via.placeholder.com/225x350?text=${encodeURIComponent(clean)}` : img;
     const imageRes = await fetch(finalImg, { headers });
-    const buffer = Buffer.from(await imageRes.arrayBuffer());
     res.setHeader('Content-Type', 'image/jpeg');
     res.setHeader('Cache-Control', 'public, s-maxage=31536000, immutable');
-    return res.send(buffer);
-    
-  } catch (e) { 
-    return res.status(200).json({ series: "Unknown Series", img: "" }); 
-  }
+    return res.send(Buffer.from(await imageRes.arrayBuffer()));
+  } catch (e) { return res.status(200).json({ series: "Unknown Series", img: "" }); }
 }
