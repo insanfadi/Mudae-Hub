@@ -1,53 +1,37 @@
 export default async function handler(req, res) {
   const { name, info } = req.query;
-  if (!name) return res.status(400).json({ error: "Name required" });
+  if (!name) return res.status(400).end();
 
   try {
-    let imageUrl = "";
-    let seriesName = "Unknown Series";
-
-    // 1. Try AniList First
-    const aniQuery = `query ($s: String) { Character (search: $s) { image { large } media (perPage: 1) { nodes { title { userPreferred } } } } }`;
+    const aniQuery = `query($s:String){Character(search:$s){image{large}media(perPage:1){nodes{title{userPreferred}}}}} `;
     const aniRes = await fetch('https://graphql.anilist.co', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ query: aniQuery, variables: { s: name } })
     });
+    
     const aniData = await aniRes.json();
+    let img = "", series = "Unknown Series";
 
     if (aniData.data?.Character) {
-      imageUrl = aniData.data.Character.image.large;
-      seriesName = aniData.data.Character.media.nodes[0]?.title.userPreferred || "Unknown";
-    } 
-
-    // 2. Stronger Mudae.net Scraper for Memes/Western/Custom chars
-    if (!imageUrl || seriesName === "Unknown Series") {
-      const searchName = name.split('(')[0].trim();
-      const wikiRes = await fetch(`https://mudae.net/wiki/search?term=${encodeURIComponent(searchName)}`);
+      img = aniData.data.Character.image.large;
+      series = aniData.data.Character.media.nodes[0]?.title.userPreferred || series;
+    } else {
+      // Deep scrape Mudae.net if AniList fails
+      const wikiRes = await fetch(`https://mudae.net/wiki/search?term=${encodeURIComponent(name.split('(')[0])}`);
       const html = await wikiRes.text();
-      
-      // Look for images and look for the series name in the HTML
-      const imgMatch = html.match(/https:\/\/mudae\.net\/uploads\/char\/[^"]+/);
-      const seriesMatch = html.match(/<a href="\/wiki\/[^"]+">([^<]+)<\/a>/);
-      
-      if (imgMatch) imageUrl = imgMatch[0];
-      if (seriesMatch && seriesMatch[1] && !seriesMatch[1].includes('Wiki')) {
-        seriesName = seriesMatch[1];
-      }
+      img = html.match(/https:\/\/mudae\.net\/uploads\/char\/[^"]+/)?.[0] || "";
+      series = html.match(/<a href="\/wiki\/[^"]+">([^<]+)<\/a>/)?.[1] || series;
     }
 
-    if (info) return res.status(200).json({ series: seriesName, image: imageUrl });
+    if (info) return res.status(200).json({ series, img });
 
-    if (imageUrl) {
-      const imageRes = await fetch(imageUrl);
-      const buffer = await imageRes.arrayBuffer();
-      res.setHeader('Content-Type', 'image/png');
-      res.setHeader('Cache-Control', 'public, s-maxage=31536000'); 
-      return res.send(Buffer.from(buffer));
+    // Edge Caching: 1 year public cache
+    res.setHeader('Cache-Control', 'public, s-maxage=31536000, immutable');
+    if (img) {
+      const imageRes = await fetch(img);
+      return res.send(Buffer.from(await imageRes.arrayBuffer()));
     }
-    
-    return res.redirect(`https://via.placeholder.com/225x350/1a202c/e2e8f0?text=${encodeURIComponent(name)}`);
-  } catch (e) {
-    return res.status(500).json({ error: "Failed" });
-  }
+    return res.redirect(`https://via.placeholder.com/225x350/0b0f1a/475569?text=${encodeURIComponent(name)}`);
+  } catch (e) { return res.status(500).end(); }
 }
