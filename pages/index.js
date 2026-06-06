@@ -1,22 +1,40 @@
-import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { db } from '../lib/firebase';
 import { doc, setDoc, onSnapshot, collection, updateDoc, arrayUnion, arrayRemove, deleteDoc } from 'firebase/firestore';
-import { Search, Lock, Unlock, Import, Plus, Tag, Share2, Trash2, X, RefreshCw, CheckCircle } from 'lucide-react';
+import { Search, Lock, Unlock, Import, Plus, Tag, Trash2, X, RefreshCw, Users, LayoutGrid, CheckCircle2 } from 'lucide-react';
 
 const CharacterCard = React.memo(({ char, isUnlocked, onToggleTrade, onDelete, isTagged }) => (
-  <div className="group relative bg-[#111622] rounded-xl border border-slate-800 hover:border-pink-600/50 transition-all overflow-hidden shadow-2xl">
-    <div className="aspect-[2/3] relative bg-slate-900">
-      <img src={`/api/mudae?name=${encodeURIComponent(char.name)}`} alt={char.name} className="w-full h-full object-cover" loading="lazy" />
-      <div className="absolute inset-0 bg-gradient-to-t from-[#0b0f1a] via-transparent to-transparent opacity-80"></div>
-      <div className="absolute top-2 left-2 bg-black/80 px-2 py-0.5 rounded text-[10px] font-bold text-orange-400 border border-orange-400/20">{char.kakera.toLocaleString()} ka</div>
+  <div className="group relative bg-[#1a1f2e] rounded-2xl border border-slate-800 hover:border-pink-500/50 transition-all duration-300 overflow-hidden shadow-2xl">
+    <div className="aspect-[2/3] relative bg-slate-900 overflow-hidden">
+      <img src={`/api/mudae?name=${encodeURIComponent(char.name)}`} alt={char.name} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" loading="lazy" />
+      <div className="absolute inset-0 bg-gradient-to-t from-[#0b0f1a] via-transparent to-transparent opacity-90"></div>
+      
+      {/* Kakera Badge */}
+      <div className="absolute top-2 left-2 bg-black/60 backdrop-blur-md px-2 py-1 rounded-lg text-[10px] font-black text-orange-400 border border-white/5">
+        {char.kakera.toLocaleString()}
+      </div>
+
+      {/* Delete Button */}
       {isUnlocked && (
-        <button onClick={() => onDelete(char)} className="absolute top-2 right-2 p-1.5 bg-red-600 text-white rounded-lg opacity-0 group-hover:opacity-100 transition-all shadow-xl"><X size={12}/></button>
+        <button onClick={() => onDelete(char)} className="absolute top-2 right-2 p-1.5 bg-red-500/20 text-red-500 hover:bg-red-500 hover:text-white rounded-lg backdrop-blur-md opacity-0 group-hover:opacity-100 transition-all">
+          <X size={14}/>
+        </button>
       )}
-      <button onClick={() => onToggleTrade(char.series)} className={`absolute bottom-3 right-3 p-2 rounded-full backdrop-blur-md transition-all shadow-lg ${isTagged ? 'bg-green-500 text-white' : 'bg-white/5 text-white/30 hover:bg-white/10'}`}><Tag size={10}/></button>
+
+      {/* Trade Toggle */}
+      <button onClick={() => onToggleTrade(char.series)} className={`absolute bottom-3 right-3 p-2.5 rounded-xl backdrop-blur-md transition-all shadow-xl ${isTagged ? 'bg-green-500 text-white shadow-green-500/20' : 'bg-white/5 text-white/20 hover:bg-white/10'}`}>
+        <Tag size={14} fill={isTagged ? "currentColor" : "none"}/>
+      </button>
     </div>
-    <div className="p-2.5">
-      <h4 className="text-[10px] font-black text-white truncate uppercase tracking-tighter">{char.name}</h4>
-      <p className="text-[8px] text-slate-500 truncate font-bold uppercase tracking-widest">{char.series || 'Unknown'}</p>
+
+    <div className="p-3">
+      <h4 className="text-[11px] font-black text-white truncate uppercase tracking-tight">{char.name}</h4>
+      <p className="text-[9px] text-slate-500 truncate font-bold uppercase tracking-widest mt-0.5">{char.series || 'Unknown'}</p>
+      {isTagged && (
+        <div className="mt-2 text-[8px] font-black text-green-400 flex items-center gap-1.5 bg-green-400/10 w-fit px-2 py-0.5 rounded-full border border-green-400/20">
+          <div className="w-1 h-1 bg-green-400 rounded-full animate-pulse"></div> FOR TRADE
+        </div>
+      )}
     </div>
   </div>
 ));
@@ -28,6 +46,7 @@ export default function MudaeHub() {
   const [pin, setPin] = useState('');
   const [isUnlocked, setIsUnlocked] = useState(false);
   const [search, setSearch] = useState('');
+  const [newProfileName, setNewProfileName] = useState('');
   const [isFixing, setIsFixing] = useState(false);
   const [progress, setProgress] = useState({ current: 0, total: 0 });
 
@@ -41,60 +60,54 @@ export default function MudaeHub() {
     return () => unsub();
   }, [activeProfile]);
 
-  // NEW: Smart Auto-Fixer Loop
-  const autoFixEverything = async () => {
+  // SMART PARALLEL FIXER (3x Faster)
+  const smartFixer = async () => {
     if (!isUnlocked || isFixing) return;
-    
     const allChars = [...(profiles[activeProfile]?.characters || [])];
-    const unknowns = allChars.filter(c => c.series === "Unknown" || !c.series);
+    const targetChars = allChars.filter(c => c.series === "Unknown" || !c.series);
     
-    if (unknowns.length === 0) return alert("All characters already have series names!");
+    if (targetChars.length === 0) return alert("Harem is already fully detailed!");
     
     setIsFixing(true);
-    setProgress({ current: 0, total: unknowns.length });
+    setProgress({ current: 0, total: targetChars.length });
 
-    let batchCount = 0;
-    
-    for (let char of allChars) {
-      if (char.series === "Unknown" || !char.series) {
+    // Process in batches of 3
+    for (let i = 0; i < targetChars.length; i += 3) {
+      const batch = targetChars.slice(i, i + 3);
+      await Promise.all(batch.map(async (char) => {
         try {
           const res = await fetch(`/api/mudae?name=${encodeURIComponent(char.name)}&info=true`);
           const data = await res.json();
-          if (data.series) {
-            char.series = data.series;
-            batchCount++;
+          const mainChar = allChars.find(c => c.id === char.id);
+          if (mainChar && data.series) {
+            mainChar.series = data.series;
             setProgress(prev => ({ ...prev, current: prev.current + 1 }));
           }
-          
-          // Small pause to prevent being banned (250ms)
-          await new Promise(r => setTimeout(r, 250));
-
-          // Every 20 characters, save to database so we don't lose progress
-          if (batchCount >= 20) {
-            await updateDoc(doc(db, "profiles", activeProfile), { characters: allChars });
-            batchCount = 0;
-          }
         } catch (e) { console.error(e); }
+      }));
+      
+      // Save progress to database every 15 successful fixes
+      if (i % 15 === 0) {
+        await updateDoc(doc(db, "profiles", activeProfile), { characters: allChars });
       }
+      // Tiny delay to keep AniList happy
+      await new Promise(r => setTimeout(r, 800));
     }
 
-    // Final save for the remaining characters
     await updateDoc(doc(db, "profiles", activeProfile), { characters: allChars });
     setIsFixing(false);
-    alert("Auto-Fix Complete! All 931 characters checked.");
+    alert("Harem Cleaned & Updated!");
   };
 
   const handleImport = async () => {
     if (!isUnlocked) return alert("Enter PIN!");
     const lines = inputText.split('\n');
     const newChars = lines.map(line => {
-      let name = "", kakera = 0;
       const kaMatch = line.match(/([\d,]+)\s*ka/);
-      if (kaMatch) {
-        kakera = parseInt(kaMatch[1].replace(/,/g, ''));
-        name = line.replace(/#[\d,]+ - /, '').replace(kaMatch[0], '').trim();
-      }
-      return name ? { name, series: "Unknown", kakera, keys: line.match(/\((\d+)\)/)?.[1] || 0, id: Math.random().toString(36).substr(2, 9) } : null;
+      if (!kaMatch) return null;
+      const kakera = parseInt(kaMatch[1].replace(/,/g, ''));
+      const name = line.replace(/#[\d,]+ - /, '').replace(kaMatch[0], '').trim();
+      return { name, series: "Unknown", kakera, keys: line.match(/\((\d+)\)/)?.[1] || 0, id: Math.random().toString(36).substr(2, 9) };
     }).filter(Boolean);
 
     await updateDoc(doc(db, "profiles", activeProfile), { characters: arrayUnion(...newChars) });
@@ -103,8 +116,8 @@ export default function MudaeHub() {
 
   const filteredChars = useMemo(() => {
     const chars = profiles[activeProfile]?.characters || [];
-    if (!search) return chars;
-    return chars.filter(c => c.name.toLowerCase().includes(search.toLowerCase()) || (c.series && c.series.toLowerCase().includes(search.toLowerCase())));
+    const s = search.toLowerCase();
+    return s ? chars.filter(c => c.name.toLowerCase().includes(s) || c.series?.toLowerCase().includes(s)) : chars;
   }, [profiles, activeProfile, search]);
 
   const toggleTradeTag = useCallback(async (series) => {
@@ -119,65 +132,79 @@ export default function MudaeHub() {
   }, [activeProfile, isUnlocked]);
 
   return (
-    <div className="min-h-screen bg-[#0b0f1a] text-slate-300 pb-20">
-      <nav className="border-b border-slate-800 bg-[#0f172a]/95 sticky top-0 z-50 backdrop-blur-xl">
-        <div className="max-w-7xl mx-auto px-4 h-14 flex items-center justify-between">
-          <div className="font-black text-white text-[10px] tracking-widest uppercase flex items-center gap-2">
-             <div className="w-6 h-6 bg-pink-600 rounded flex items-center justify-center text-[12px]">M</div>
-             Mudae Hub
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="flex bg-slate-900 rounded-md p-1 border border-slate-800">
-              <input type="password" placeholder="PIN" className="bg-transparent px-2 w-12 text-[10px] outline-none" onChange={(e) => setPin(e.target.value)} />
-              <button onClick={() => setIsUnlocked(pin === "1234")} className={isUnlocked ? 'text-green-500' : 'text-slate-600'}><Unlock size={12}/></button>
-            </div>
-            <select value={activeProfile} onChange={(e) => setActiveProfile(e.target.value)} className="bg-slate-900 border border-slate-800 rounded-md px-2 py-1 text-[10px] font-bold text-pink-500 outline-none">
-              {Object.keys(profiles).map(name => <option key={name} value={name}>{name}</option>)}
-            </select>
-          </div>
+    <div className="min-h-screen bg-[#0b0f1a] text-slate-300 flex flex-col md:flex-row">
+      
+      {/* SIDEBAR - PROFILE SWITCHER */}
+      <aside className="w-full md:w-64 bg-[#0f172a] border-r border-slate-800 p-6 space-y-8 z-50">
+        <div className="flex items-center gap-3 mb-10">
+          <div className="w-10 h-10 bg-gradient-to-br from-pink-500 to-rose-600 rounded-xl flex items-center justify-center text-white font-black shadow-lg shadow-pink-500/20">M</div>
+          <h1 className="text-lg font-black text-white tracking-tighter uppercase leading-none">Mudae<br/>Hub</h1>
         </div>
-      </nav>
 
-      <main className="max-w-7xl mx-auto p-4 md:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
-        <div className="lg:col-span-3 space-y-4">
-          <div className="bg-slate-900/50 border border-slate-800 p-4 rounded-2xl shadow-xl">
-             <button 
-                onClick={autoFixEverything} 
-                disabled={!isUnlocked || isFixing} 
-                className="w-full mb-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 disabled:from-slate-800 disabled:to-slate-800 py-2.5 rounded-xl text-[10px] font-bold text-white flex items-center justify-center gap-2 transition-all shadow-lg shadow-blue-900/20"
-              >
-              {isFixing ? <RefreshCw size={12} className="animate-spin"/> : <CheckCircle size={12}/>} 
-              {isFixing ? `FIXING: ${progress.current}/${progress.total}` : 'AUTO-FIX ENTIRE LIST'}
+        <nav className="space-y-1">
+          <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] mb-4 block">Switch Profiles</label>
+          {Object.keys(profiles).map(name => (
+            <button 
+              key={name} 
+              onClick={() => setActiveProfile(name)}
+              className={`w-full flex items-center justify-between group px-4 py-3 rounded-xl text-xs font-bold transition-all ${activeProfile === name ? 'bg-pink-600 text-white shadow-lg shadow-pink-600/20' : 'text-slate-400 hover:bg-white/5'}`}
+            >
+              <div className="flex items-center gap-3"><Users size={14}/> {name}</div>
+              {isUnlocked && activeProfile === name && (
+                <Trash2 size={14} className="text-white/40 hover:text-white" onClick={(e) => { e.stopPropagation(); if(confirm(`Delete ${name}?`)) deleteDoc(doc(db, "profiles", name)); }}/>
+              )}
             </button>
-            
-            {isFixing && (
-              <div className="w-full bg-slate-950 h-1 rounded-full mb-4 overflow-hidden">
-                <div className="bg-blue-500 h-full transition-all duration-300" style={{ width: `${(progress.current/progress.total)*100}%` }}></div>
-              </div>
-            )}
-            
-            <div className="relative mb-3">
-              <Search className="absolute left-3 top-2.5 text-slate-600" size={12}/>
-              <input className="w-full bg-slate-950 border border-slate-800 rounded-lg py-2 pl-9 text-[10px] outline-none focus:border-pink-500 transition-colors" placeholder="Filter characters..." onChange={(e) => setSearch(e.target.value)} />
+          ))}
+          
+          <div className="pt-4 space-y-2">
+            <input className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-[10px] focus:border-pink-600 outline-none transition-colors" placeholder="Create Profile..." value={newProfileName} onChange={(e) => setNewProfileName(e.target.value)} />
+            <button onClick={() => { if(!newProfileName) return; setDoc(doc(db, "profiles", newProfileName), { characters: [], tradeTags: [] }); setActiveProfile(newProfileName); setNewProfileName(''); }} className="w-full bg-slate-800 hover:bg-slate-700 py-2 rounded-xl text-[10px] font-bold transition-all">Add Friend +</button>
+          </div>
+        </nav>
+      </aside>
+
+      {/* MAIN CONTENT */}
+      <main className="flex-1 p-4 md:p-10 lg:p-16 overflow-y-auto">
+        <header className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 mb-12">
+          <div>
+            <h2 className="text-6xl font-black text-white italic uppercase tracking-tighter leading-none mb-2">{activeProfile}</h2>
+            <p className="text-slate-500 text-xs font-bold uppercase tracking-[0.3em] flex items-center gap-2">
+              <LayoutGrid size={12}/> {filteredChars.length} Total Characters
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-4">
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl flex p-1.5">
+              <input type="password" placeholder="PIN" className="bg-transparent px-3 w-16 text-xs outline-none" onChange={(e) => setPin(e.target.value)} />
+              <button onClick={() => setIsUnlocked(pin === "1234")} className={`p-2 rounded-xl transition-all ${isUnlocked ? 'bg-green-500 text-white shadow-lg shadow-green-500/20' : 'text-slate-600 hover:bg-white/5'}`}>
+                {isUnlocked ? <Unlock size={16}/> : <Lock size={16}/>}
+              </button>
             </div>
+            
+            <button 
+              onClick={smartFixer} 
+              disabled={!isUnlocked || isFixing} 
+              className="bg-blue-600 hover:bg-blue-500 disabled:bg-slate-800 text-white px-6 py-3 rounded-2xl text-xs font-black uppercase tracking-widest shadow-xl shadow-blue-500/20 flex items-center gap-3 transition-all"
+            >
+              {isFixing ? <RefreshCw size={16} className="animate-spin"/> : <CheckCircle2 size={16}/>}
+              {isFixing ? `FIXING: ${progress.current}/${progress.total}` : 'Smart Fix Series'}
+            </button>
+          </div>
+        </header>
 
-            <textarea className="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 text-[10px] h-24 outline-none font-mono" placeholder="Paste $mms l- k here..." value={inputText} onChange={(e) => setInputText(e.target.value)} />
-            <button onClick={handleImport} disabled={!isUnlocked} className="w-full mt-2 bg-pink-600 hover:bg-pink-500 py-2.5 rounded-xl text-[10px] font-bold text-white shadow-lg shadow-pink-900/20 transition-all">Import Characters</button>
-          </div>
-        </div>
+        <section className="grid grid-cols-1 lg:grid-cols-4 gap-10">
+          {/* Controls */}
+          <div className="lg:col-span-1 space-y-8">
+            <div className="bg-[#111622] border border-slate-800 p-6 rounded-3xl space-y-6">
+              <div className="relative">
+                <Search className="absolute left-4 top-3.5 text-slate-600" size={16}/>
+                <input className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-3.5 pl-12 pr-4 text-xs outline-none focus:border-pink-500 transition-all" placeholder="Search harem..." onChange={(e) => setSearch(e.target.value)} />
+              </div>
 
-        <div className="lg:col-span-9">
-          <div className="flex items-baseline justify-between mb-6">
-            <h2 className="text-4xl font-black text-white italic uppercase tracking-tighter leading-none">{activeProfile}</h2>
-            <div className="text-[10px] font-bold text-slate-600 tracking-[0.2em]">{filteredChars.length} CHARACTERS</div>
+              <div className="space-y-3">
+                <label className="text-[10px] font-black text-slate-600 uppercase tracking-widest">Bulk Import ($mms)</label>
+                <textarea className="w-full bg-slate-950 border border-slate-800 rounded-2xl p-4 text-[10px] h-40 outline-none font-mono focus:border-pink-600 transition-all" placeholder="Paste Discord text here..." value={inputText} onChange={(e) => setInputText(e.target.value)} />
+                <button onClick={handleImport} disabled={!isUnlocked} className="w-full bg-pink-600 hover:bg-pink-500 disabled:bg-slate-800 py-4 rounded-2xl text-xs font-black text-white uppercase tracking-widest transition-all shadow-xl shadow-pink-600/20">Update Collection</button>
+              </div>
+            </div>
           </div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4">
-            {filteredChars.map((char) => (
-              <CharacterCard key={char.id} char={char} isUnlocked={isUnlocked} onDelete={handleDeleteCharacter} onToggleTrade={toggleTradeTag} isTagged={profiles[activeProfile]?.tradeTags?.includes(char.series)} />
-            ))}
-          </div>
-        </div>
-      </main>
-    </div>
-  );
-}
