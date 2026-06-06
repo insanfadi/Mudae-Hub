@@ -9,11 +9,12 @@ const CharacterCard = React.memo(({ char, isUnlocked, onToggleTrade, onDelete, i
 
   return (
     <div className="group relative bg-[#161b29] rounded-[32px] border-2 border-slate-800 hover:border-pink-500 transition-all duration-500 overflow-hidden shadow-2xl flex flex-col">
-      <div className="aspect-[2/3] relative overflow-hidden bg-[#0b0f1a] transform-gpu">
+      {/* FIXED HOVER OVERFLOW */}
+      <div className="aspect-[2/3] relative overflow-hidden bg-[#0b0f1a]">
         <img 
           src={imgError ? `https://via.placeholder.com/225x350?text=Reloading` : imgUrl} 
           alt={char.name} 
-          className="w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-110 transform-gpu" 
+          className="w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-110" 
           onError={() => setImgError(true)}
           loading="lazy" 
         />
@@ -80,13 +81,12 @@ export default function MudaeHub() {
     if (!isUnlocked || isFixing) return;
     const allChars = [...(profiles[activeProfile]?.characters || [])];
     const targets = allChars.filter(c => !c.series || c.series.toLowerCase().includes('unknown'));
-    if (targets.length === 0) return alert("All fixed!");
+    if (targets.length === 0) return alert("Everything is fixed!");
 
     setIsFixing(true);
-    setTotalToFix(targets.length);
+    setTotalToFix(targets.length); // LOCK TOTAL COUNT HERE
     setProgress(0);
 
-    // BATCH PROCESSING
     const BATCH_SIZE = 3; 
     for (let i = 0; i < targets.length; i += BATCH_SIZE) {
       const batch = targets.slice(i, i + BATCH_SIZE);
@@ -103,7 +103,7 @@ export default function MudaeHub() {
       
       setProgress(i + batch.length);
       if (i % 15 === 0) await updateDoc(doc(db, "profiles", activeProfile), { characters: allChars });
-      await new Promise(r => setTimeout(r, 1800)); // Safer delay
+      await new Promise(r => setTimeout(r, 1800)); 
     }
 
     await updateDoc(doc(db, "profiles", activeProfile), { characters: allChars });
@@ -130,7 +130,6 @@ export default function MudaeHub() {
         </div>
 
         <nav className="flex-1 space-y-5">
-          <p className="text-[14px] font-black text-slate-600 uppercase tracking-widest ml-2 mb-8">Rollers List</p>
           {Object.keys(profiles).map(name => (
             <button key={name} onClick={() => setActiveProfile(name)} className={`w-full flex items-center justify-between px-8 py-6 rounded-[28px] text-[18px] font-bold transition-all duration-300 ${activeProfile === name ? 'bg-pink-600 text-white shadow-2xl translate-x-2' : 'text-slate-400 hover:bg-white/5 hover:text-white'}`}>
               <div className="flex items-center gap-5"><Users size={24}/> {name}</div>
@@ -164,7 +163,7 @@ export default function MudaeHub() {
             </div>
             <button onClick={smartFixer} disabled={!isUnlocked || isFixing} className="bg-blue-600 hover:bg-blue-500 disabled:bg-slate-900 text-white px-16 py-8 rounded-[40px] text-[18px] font-black uppercase tracking-[0.1em] flex items-center gap-8 shadow-2xl shadow-blue-600/20 transition-all active:scale-95">
               {isFixing ? <RefreshCw size={30} className="animate-spin"/> : <CheckCircle2 size={30}/>}
-              {isFixing ? `FIXING: ${progress} / ${totalToFix}` : 'Scan Harem'}
+              {isFixing ? `FIXING: ${Math.min(progress, totalToFix)} / ${totalToFix}` : 'Scan Harem'}
             </button>
           </div>
         </header>
@@ -177,7 +176,6 @@ export default function MudaeHub() {
                 <input className="w-full bg-slate-950 border-2 border-slate-800 rounded-[32px] py-8 pl-24 pr-12 text-xl outline-none focus:border-pink-500 font-bold transition-all shadow-inner" placeholder="Quick Search..." onChange={(e) => setSearch(e.target.value)} />
               </div>
               <div className="space-y-8">
-                <p className="text-[16px] font-black text-slate-500 uppercase tracking-widest ml-4">Import Data</p>
                 <textarea className="w-full bg-slate-950 border-2 border-slate-800 rounded-[32px] p-8 text-[14px] h-80 outline-none font-mono focus:border-pink-600 text-pink-500" placeholder="$mms l- k" value={inputText} onChange={(e) => setInputText(e.target.value)} />
                 <button onClick={() => { const news = inputText.split('\n').map(l => { const k = l.match(/([\d,]+)\s*ka/); if (!k) return null; return { name: l.replace(/#[\d,]+ - /, '').split(k[0])[0].trim(), series: "Unknown", kakera: parseInt(k[1].replace(/,/g, '')), id: Math.random().toString(36).substr(2, 9) }; }).filter(Boolean); updateDoc(doc(db, "profiles", activeProfile), { characters: arrayUnion(...news) }); setInputText(''); }} disabled={!isUnlocked} className="w-full bg-pink-600 hover:bg-pink-500 py-8 rounded-[32px] text-[18px] font-black text-white uppercase shadow-2xl">Import Chars</button>
               </div>
