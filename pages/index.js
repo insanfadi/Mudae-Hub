@@ -13,7 +13,7 @@ const CharacterCard = React.memo(({ char, isUnlocked, onToggleTrade, onDelete, i
         <img src={imgError ? `https://via.placeholder.com/225x350?text=Reloading` : imgUrl} alt={char.name} className="w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-110" onError={() => setImgError(true)} loading="lazy" />
         <div className="absolute inset-0 bg-gradient-to-t from-[#0b0f1a] via-transparent to-transparent opacity-90" />
         
-        <div className="absolute top-4 left-4 bg-black/80 backdrop-blur-xl px-3 py-1 rounded-xl text-[13px] font-black text-orange-400 border border-white/10 shadow-2xl z-10 flex items-center gap-1.5">
+        <div className="absolute top-4 left-4 bg-black/80 backdrop-blur-xl px-3 py-1.5 rounded-xl text-[13px] font-black text-orange-400 border border-white/10 shadow-2xl z-10 flex items-center gap-1.5">
           <Gem size={12} className="text-orange-400 fill-orange-400/20" />
           {char.kakera?.toLocaleString()}
         </div>
@@ -49,7 +49,7 @@ export default function MudaeHub() {
   const [wishlistText, setWishlistText] = useState('');
   const [passwordInput, setPasswordInput] = useState('');
   const [isUnlocked, setIsUnlocked] = useState(false);
-  const [query, setQuery] = useState(''); // Renamed to query to avoid build conflict
+  const [query, setQuery] = useState('');
   const [isFixing, setIsFixing] = useState(false);
   const [progress, setProgress] = useState(0);
   const [totalToFix, setTotalToFix] = useState(0);
@@ -69,7 +69,13 @@ export default function MudaeHub() {
     const profileData = profiles[activeProfile];
     if (!profileData) return;
     if (passwordInput === "AhmadMudae2026") { await updateDoc(doc(db, "profiles", activeProfile), { password: "AhmadMudae2026" }); setIsUnlocked(true); return; }
-    if (!profileData.password) { if (confirm(`Set "${passwordInput}" as password?`)) { await updateDoc(doc(db, "profiles", activeProfile), { password: passwordInput }); setIsUnlocked(true); } return; }
+    if (!profileData.password) {
+      if (confirm(`No password for ${activeProfile}. Set "${passwordInput}" as password?`)) {
+        await updateDoc(doc(db, "profiles", activeProfile), { password: passwordInput });
+        setIsUnlocked(true);
+      }
+      return;
+    }
     if (passwordInput === profileData.password) setIsUnlocked(true);
     else alert("Wrong Password!");
   };
@@ -78,7 +84,8 @@ export default function MudaeHub() {
     if (!isUnlocked || isFixing) return;
     const allChars = [...(profiles[activeProfile]?.characters || [])];
     const targets = forceAll ? allChars : allChars.filter(c => !c.series || c.series.toLowerCase().includes('unknown') || c.gender === 'none');
-    if (targets.length === 0) return alert("Everything updated!");
+    if (targets.length === 0) return alert("Everything is fully updated!");
+
     setIsFixing(true); setTotalToFix(targets.length); setProgress(0);
     const BATCH_SIZE = 3; 
     for (let i = 0; i < targets.length; i += BATCH_SIZE) {
@@ -88,10 +95,10 @@ export default function MudaeHub() {
           const res = await fetch(`/api/mudae?name=${encodeURIComponent(char.name)}&series=${encodeURIComponent(char.series)}&info=true`);
           const data = await res.json();
           const idx = allChars.findIndex(c => c.id === char.id);
-          if (idx !== -1 && data.img) { allChars[idx].gender = data.gender; if (!allChars[idx].series || allChars[idx].series === 'Unknown') allChars[idx].series = data.series; }
+          if (idx !== -1 && data.img) { allChars[idx].gender = data.gender; }
         } catch (e) {}
       }));
-      setProgress(i + batch.length);
+      setProgress(Math.min(i + BATCH_SIZE, targets.length));
       if (i % 12 === 0) await updateDoc(doc(db, "profiles", activeProfile), { characters: allChars });
       await new Promise(r => setTimeout(r, 1500)); 
     }
@@ -108,13 +115,8 @@ export default function MudaeHub() {
     lines.forEach(line => {
       const l = line.trim();
       if (!l || l.includes('Click to react') || l.includes('PM]') || l.includes('AM]')) return;
-
       const seriesHeaderMatch = l.match(/^(.+?)\s*-\s*\d+\/\d+/);
-      if (seriesHeaderMatch) {
-        currentSeries = seriesHeaderMatch[1].trim();
-        return;
-      }
-
+      if (seriesHeaderMatch) { currentSeries = seriesHeaderMatch[1].trim(); return; }
       if (l.startsWith('#')) {
         const rankMatch = l.match(/#([\d,]+)/);
         const kakeraMatch = l.match(/([\d,]+)\s*ka/);
@@ -180,25 +182,15 @@ export default function MudaeHub() {
               <input type="text" name="username" value={activeProfile} readOnly className="hidden" autoComplete="username" />
               {!isUnlocked && (
                 <input type="password" name="password" placeholder="PASSWORD" value={passwordInput} autoComplete="current-password" 
-                  className="bg-transparent px-6 w-48 text-sm outline-none font-black tracking-[0.2em] text-white placeholder:text-slate-700" 
+                  className="bg-transparent px-6 w-48 text-sm outline-none font-black tracking-[0.2em] text-white placeholder:text-slate-700 selection:bg-pink-500/30" 
                   onChange={(e) => setPasswordInput(e.target.value)} 
                 />
               )}
               <button type="submit" className={`p-3.5 rounded-2xl transition-all duration-500 ${isUnlocked ? 'bg-green-500 text-white shadow-lg rotate-[360deg]' : 'bg-slate-800 text-slate-500 hover:text-white'}`}><Unlock size={24}/></button>
             </form>
             <div className="flex flex-col gap-3">
-              <button onClick={() => smartFixer(false)} disabled={!isUnlocked || isFixing} className="bg-blue-600 hover:bg-blue-500 disabled:bg-slate-900 text-white px-14 py-5 rounded-[32px] text-[16px] font-black uppercase tracking-widest flex items-center gap-6 shadow-2xl shadow-blue-600/20 active:scale-95 transition-all min-w-[240px] justify-center">
+              <button onClick={() => smartFixer(false)} disabled={!isUnlocked || isFixing} className="bg-blue-600 hover:bg-blue-500 disabled:bg-slate-900 text-white px-10 py-5 rounded-[32px] text-[16px] font-black uppercase tracking-widest flex items-center gap-6 shadow-2xl shadow-blue-600/20 active:scale-95 min-w-[240px] justify-center">
                 {isFixing ? <RefreshCw size={22} className="animate-spin"/> : <CheckCircle2 size={22}/>}
-                {isFixing ? `FIXING: ${progress}` : 'Scan Harem'}
+                {isFixing ? `FIXING: ${progress} / ${totalToFix}` : 'Scan Harem'}
               </button>
-              {isUnlocked && !isFixing && <button onClick={() => {if(confirm('Full Rescan ALL characters?')) smartFixer(true)}} className="bg-slate-900/50 border-2 border-pink-600/20 hover:border-pink-600/60 text-[11px] font-black text-slate-400 hover:text-pink-500 uppercase py-3 rounded-[20px] flex items-center justify-center gap-3 transition-all tracking-widest"><Zap size={14}/> FULL RESCAN</button>}
-            </div>
-          </div>
-        </header>
-
-        <section className="grid grid-cols-1 lg:grid-cols-4 gap-12">
-          <div className="lg:col-span-1 space-y-8">
-            <div className="bg-[#111622]/90 backdrop-blur-3xl border-2 border-slate-800 p-8 rounded-[32px] space-y-8 shadow-2xl sticky top-10">
-              <div className="relative">
-                <SearchIcon className="absolute left-6 top-6 text-slate-600" size={22}/>
-                <input className="w-full bg-slate-950 border-2 border-slate-800 rounded-[20px] py-5 pl-16 pr-8 text-base outline-none focus:border-pink-500 font-bold transition-all shadow-inner" placeholder="Quick Search..." onChange={(e) => setQuery(e.target.value)} />
+              {isUnlocked && !isFixing && <button onClick={() =
