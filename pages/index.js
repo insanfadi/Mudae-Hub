@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { db } from '../lib/firebase';
 import { doc, setDoc, onSnapshot, collection, updateDoc, arrayUnion, arrayRemove, deleteDoc } from 'firebase/firestore';
 import { Search, Lock, Unlock, Tag, Trash2, X, RefreshCw, Users, CheckCircle2, ArrowUpDown, UserPlus, Heart } from 'lucide-react';
@@ -9,8 +9,7 @@ const CharacterCard = React.memo(({ char, isUnlocked, onToggleTrade, onDelete, i
 
   return (
     <div className="group relative bg-[#161b29] rounded-[24px] border-2 border-slate-800 hover:border-pink-500 transition-all duration-300 overflow-hidden shadow-2xl flex flex-col">
-      {/* IMAGE CONTAINER - FIXED OVERFLOW AND HOVER */}
-      <div className="aspect-[2/3] relative overflow-hidden bg-[#0b0f1a]">
+      <div className="aspect-[2/3] relative overflow-hidden bg-[#0b0f1a] transform-gpu">
         <img 
           src={imgError ? `https://via.placeholder.com/225x350?text=Reloading` : imgUrl} 
           alt={char.name} 
@@ -18,29 +17,20 @@ const CharacterCard = React.memo(({ char, isUnlocked, onToggleTrade, onDelete, i
           onError={() => setImgError(true)}
           loading="lazy" 
         />
-        {/* GRADIENT OVERLAY */}
-        <div className="absolute inset-0 bg-gradient-to-t from-[#0b0f1a] via-transparent to-transparent opacity-80" />
-        
-        {/* KAKERA TAG */}
+        <div className="absolute inset-0 bg-gradient-to-t from-[#0b0f1a] via-transparent to-transparent opacity-80 pointer-events-none" />
         <div className="absolute top-4 left-4 bg-black/80 backdrop-blur-md px-3 py-1.5 rounded-xl text-[14px] font-black text-orange-400 border border-white/10 shadow-2xl z-10">
           {char.kakera.toLocaleString()}
         </div>
-
-        {/* DELETE BUTTON */}
         {isUnlocked && (
-          <button onClick={() => onDelete(char)} className="absolute top-4 right-4 p-2.5 bg-red-600 hover:bg-red-500 text-white rounded-2xl opacity-0 group-hover:opacity-100 transition-all shadow-xl z-20">
+          <button onClick={() => onDelete(char)} className="absolute top-4 right-4 p-2.5 bg-red-600 hover:bg-red-500 text-white rounded-2xl opacity-0 group-hover:opacity-100 transition-all shadow-xl z-30">
             <X size={20}/>
           </button>
         )}
-
-        {/* TRADE TAG BUTTON */}
-        <button onClick={() => onToggleTrade(char.series)} className={`absolute bottom-5 right-5 p-4 rounded-2xl backdrop-blur-xl transition-all z-20 ${isTagged ? 'bg-pink-600 text-white shadow-pink-600/50 shadow-lg scale-110' : 'bg-white/5 text-white/20 hover:bg-white/10'}`}>
+        <button onClick={() => onToggleTrade(char.series)} className={`absolute bottom-5 right-5 p-4 rounded-2xl backdrop-blur-xl transition-all z-30 ${isTagged ? 'bg-pink-600 text-white shadow-pink-600/50 shadow-lg scale-110' : 'bg-white/5 text-white/20 hover:bg-white/10'}`}>
           <Tag size={20}/>
         </button>
       </div>
-
-      {/* TEXT AREA - INCREASED SIZE */}
-      <div className="p-6 bg-[#161b29] relative z-10">
+      <div className="p-6 bg-[#161b29] relative z-20">
         <h4 className="text-[18px] font-bold text-white truncate uppercase tracking-tight leading-tight mb-1">{char.name}</h4>
         <p className={`text-[13px] truncate font-black uppercase tracking-widest ${char.series?.toLowerCase().includes('unknown') ? 'text-red-500' : 'text-slate-500'}`}>
           {char.series || 'Unknown'}
@@ -69,56 +59,66 @@ export default function MudaeHub() {
     });
   }, [activeProfile]);
 
-  useEffect(() => {
-    setIsUnlocked(false);
-    setPasswordInput('');
-  }, [activeProfile]);
+  useEffect(() => { setIsUnlocked(false); setPasswordInput(''); }, [activeProfile]);
 
   const handleUnlock = async () => {
     const profileData = profiles[activeProfile];
     if (!profileData) return;
     if (!profileData.password) {
-      const newPass = prompt("Set a password for " + activeProfile + ":");
-      if (newPass) {
-        await updateDoc(doc(db, "profiles", activeProfile), { password: newPass });
-        alert("Password Saved!");
-      }
+      const newPass = prompt("Set password for " + activeProfile + ":");
+      if (newPass) { await updateDoc(doc(db, "profiles", activeProfile), { password: newPass }); alert("Saved!"); }
       return;
     }
     if (passwordInput === profileData.password) setIsUnlocked(true);
-    else alert("Incorrect Password!");
+    else alert("Incorrect!");
   };
 
   const handleAddRoller = async () => {
-    const name = prompt("Roller Name:");
-    if (!name) return;
-    const pass = prompt("Set Password:");
-    if (!pass) return;
+    const name = prompt("Roller Name:"); if (!name) return;
+    const pass = prompt("Set Password:"); if (!pass) return;
     await setDoc(doc(db, "profiles", name), { characters: [], tradeTags: [], password: pass });
     setActiveProfile(name);
   };
 
+  // --- TURBO SYNC LOGIC ---
   const smartFixer = async () => {
     if (!isUnlocked || isFixing) return;
     const allChars = [...(profiles[activeProfile]?.characters || [])];
     const targets = allChars.filter(c => !c.series || c.series.toLowerCase().includes('unknown'));
+    if (targets.length === 0) return alert("Everything is fixed!");
+
     setIsFixing(true); setProgress(0);
-    for (let i = 0; i < targets.length; i++) {
-      const char = targets[i];
-      try {
-        const res = await fetch(`/api/mudae?name=${encodeURIComponent(char.name)}&info=true`);
-        const data = await res.json();
-        const idx = allChars.findIndex(c => c.id === char.id);
-        if (idx !== -1 && data.series && !data.series.toLowerCase().includes('unknown')) {
-          allChars[idx].series = data.series;
-          if (i % 5 === 0) await updateDoc(doc(db, "profiles", activeProfile), { characters: allChars });
-        }
-      } catch (e) {}
-      setProgress(i + 1);
-      await new Promise(r => setTimeout(r, 2000)); 
+
+    const BATCH_SIZE = 5; // Scan 5 characters at the same time
+    for (let i = 0; i < targets.length; i += BATCH_SIZE) {
+      const batch = targets.slice(i, i + BATCH_SIZE);
+      
+      // Process the batch in parallel
+      await Promise.all(batch.map(async (char) => {
+        try {
+          const res = await fetch(`/api/mudae?name=${encodeURIComponent(char.name)}&info=true`);
+          const data = await res.json();
+          const idx = allChars.findIndex(c => c.id === char.id);
+          if (idx !== -1 && data.series && !data.series.toLowerCase().includes('unknown')) {
+            allChars[idx].series = data.series;
+          }
+        } catch (e) {}
+      }));
+
+      setProgress(Math.min(i + BATCH_SIZE, targets.length));
+      
+      // Save progress to database every 15 characters
+      if (i % 15 === 0) {
+        await updateDoc(doc(db, "profiles", activeProfile), { characters: allChars });
+      }
+
+      // Small pause between batches to prevent API blocking
+      await new Promise(r => setTimeout(r, 1200)); 
     }
+
     await updateDoc(doc(db, "profiles", activeProfile), { characters: allChars });
     setIsFixing(false);
+    alert("Turbo Sync Complete!");
   };
 
   const handleImport = async () => {
@@ -139,10 +139,8 @@ export default function MudaeHub() {
   }, [profiles, activeProfile, search, sortMode]);
 
   return (
-    <div className="min-h-screen bg-[#0b0f1a] text-slate-300 flex flex-col md:flex-row font-sans">
-      {/* SIDEBAR */}
+    <div className="min-h-screen bg-[#0b0f1a] text-slate-300 flex flex-col md:flex-row font-sans selection:bg-pink-500/30">
       <aside className="w-full md:w-80 bg-[#0f172a] border-r border-slate-800 p-8 flex flex-col shrink-0 z-50">
-        {/* FIXED TOP-LEFT LOGO */}
         <div className="flex items-center gap-4 mb-14">
           <div className="w-16 h-16 bg-gradient-to-br from-pink-400 via-pink-500 to-pink-700 rounded-[22px] flex items-center justify-center shadow-[0_0_30px_-5px_rgba(219,39,119,0.4)]">
             <Heart className="text-white fill-white" size={32} />
@@ -152,13 +150,12 @@ export default function MudaeHub() {
             <p className="text-[12px] font-bold text-pink-500 tracking-[0.4em] uppercase mt-1">Dashboard</p>
           </div>
         </div>
-
         <nav className="flex-1 space-y-4">
           <p className="text-[13px] font-black text-slate-600 uppercase tracking-widest ml-2 mb-6">Rollers List</p>
           {Object.keys(profiles).map(name => (
             <button key={name} onClick={() => setActiveProfile(name)} className={`w-full flex items-center justify-between px-7 py-5 rounded-[24px] text-[16px] font-bold transition-all duration-300 ${activeProfile === name ? 'bg-pink-600 text-white shadow-2xl translate-x-2' : 'text-slate-400 hover:bg-white/5 hover:text-white'}`}>
               <div className="flex items-center gap-4"><Users size={22}/> {name}</div>
-              {isUnlocked && activeProfile === name && <Trash2 size={20} className="opacity-40 hover:opacity-100 transition-opacity" onClick={(e) => { e.stopPropagation(); if(confirm('Delete?')) deleteDoc(doc(db, "profiles", name)); }}/>}
+              {isUnlocked && activeProfile === name && <Trash2 size={20} className="opacity-40 hover:opacity-100 transition-opacity" onClick={(e) => { e.stopPropagation(); if(confirm('Delete Profile?')) deleteDoc(doc(db, "profiles", name)); }}/>}
             </button>
           ))}
           <button onClick={handleAddRoller} className="w-full border-2 border-dashed border-slate-800 hover:border-pink-600 py-6 rounded-[24px] text-[14px] font-black uppercase text-slate-500 mt-10 transition-colors flex items-center justify-center gap-3">
@@ -170,7 +167,7 @@ export default function MudaeHub() {
       <main className="flex-1 p-10 md:p-20 overflow-y-auto bg-gradient-to-br from-[#0b0f1a] to-[#0f172a]">
         <header className="flex flex-col xl:flex-row justify-between gap-12 mb-28 items-center">
           <div className="text-center xl:text-left">
-            <h2 className="text-[130px] font-black text-white italic uppercase tracking-tighter leading-none drop-shadow-2xl">{activeProfile || 'Select'}</h2>
+            <h2 className="text-[130px] font-black text-white italic uppercase tracking-tighter leading-none drop-shadow-2xl">{activeProfile || 'Ready'}</h2>
             <div className="flex gap-10 mt-8 justify-center xl:justify-start items-center">
               <span className="bg-slate-900 border-2 border-slate-800 px-8 py-2.5 rounded-full text-[15px] font-black text-slate-400 uppercase tracking-widest">{sortedChars.length} CHARACTERS</span>
               <div className="flex items-center gap-4">
@@ -181,23 +178,14 @@ export default function MudaeHub() {
               </div>
             </div>
           </div>
-
           <div className="flex flex-wrap items-center gap-8 justify-center">
             <div className="bg-slate-900 border-2 border-slate-800 rounded-[35px] flex items-center p-3.5 shadow-2xl focus-within:border-pink-600 transition-all">
-              <input 
-                type="password" 
-                placeholder="ENTER PASSWORD" 
-                value={passwordInput}
-                className="bg-transparent px-8 w-64 text-base outline-none font-black tracking-[0.2em] text-white placeholder:text-slate-700" 
-                onChange={(e) => setPasswordInput(e.target.value)} 
-              />
-              <button onClick={handleUnlock} className={`p-4 rounded-3xl transition-all duration-500 ${isUnlocked ? 'bg-green-500 text-white shadow-lg rotate-[360deg]' : 'bg-slate-800 text-slate-500 hover:text-white'}`}>
-                {isUnlocked ? <Unlock size={28}/> : <Lock size={28}/>}
-              </button>
+              <input type="password" placeholder="ENTER PASSWORD" value={passwordInput} className="bg-transparent px-8 w-64 text-base outline-none font-black tracking-[0.2em] text-white placeholder:text-slate-700" onChange={(e) => setPasswordInput(e.target.value)} />
+              <button onClick={handleUnlock} className={`p-4 rounded-3xl transition-all duration-500 ${isUnlocked ? 'bg-green-500 text-white shadow-lg rotate-[360deg]' : 'bg-slate-800 text-slate-500 hover:text-white'}`}><Unlock size={28}/></button>
             </div>
-            <button onClick={smartFixer} disabled={!isUnlocked || isFixing} className="bg-blue-600 hover:bg-blue-500 disabled:bg-slate-900 disabled:text-slate-700 text-white px-14 py-7 rounded-[35px] text-[16px] font-black uppercase tracking-[0.1em] flex items-center gap-6 shadow-2xl shadow-blue-600/20 transition-all active:scale-95">
+            <button onClick={smartFixer} disabled={!isUnlocked || isFixing} className="bg-blue-600 hover:bg-blue-500 disabled:bg-slate-900 disabled:text-slate-700 text-white px-14 py-7 rounded-[35px] text-[16px] font-black uppercase tracking-[0.1em] flex items-center gap-6 shadow-2xl shadow-blue-600/20 active:scale-95 transition-all">
               {isFixing ? <RefreshCw size={26} className="animate-spin"/> : <CheckCircle2 size={26}/>}
-              {isFixing ? `SCANNING: ${progress}` : 'Scan Harem'}
+              {isFixing ? `TURBO SYNC: ${progress} / ${sortedChars.filter(c => !c.series || c.series === 'Unknown').length}` : 'Scan Harem'}
             </button>
           </div>
         </header>
@@ -212,7 +200,7 @@ export default function MudaeHub() {
               <div className="space-y-6">
                 <p className="text-[14px] font-black text-slate-500 uppercase tracking-widest ml-3">Import Mudae Data</p>
                 <textarea className="w-full bg-slate-950 border-2 border-slate-800 rounded-[28px] p-7 text-[13px] h-72 outline-none font-mono focus:border-pink-600 text-pink-500 shadow-inner" placeholder="$mms l- k" value={inputText} onChange={(e) => setInputText(e.target.value)} />
-                <button onClick={handleImport} disabled={!isUnlocked} className="w-full bg-pink-600 hover:bg-pink-500 py-7 rounded-[28px] text-[16px] font-black text-white uppercase tracking-widest shadow-2xl shadow-pink-600/40 active:scale-95 transition-all">Import Chars</button>
+                <button onClick={handleImport} disabled={!isUnlocked} className="w-full bg-pink-600 hover:bg-pink-500 py-7 rounded-[28px] text-[16px] font-black text-white uppercase tracking-widest shadow-2xl active:scale-95 transition-all">Import Chars</button>
               </div>
             </div>
           </div>
