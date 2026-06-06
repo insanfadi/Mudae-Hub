@@ -30,14 +30,31 @@ export default function MudaeHub() {
     
     const lines = inputText.split('\n');
     const newCharacters = lines.map(line => {
-      const cleanLine = line.replace(/:[^:]+:/g, '').trim();
-      const parts = cleanLine.split('·').map(p => p.trim());
-      if (parts.length < 2) return null;
-      return {
-        name: parts[0],
-        series: parts[1],
-        kakera: parts[2] ? parseInt(parts[2].replace(/,/g, '').replace('ka', '')) : 0,
-        keys: line.match(/\((\d+)\)/) ? line.match(/\((\d+)\)/)[1] : 0
+      let name = "", series = "Unknown", kakera = 0;
+
+      // New Format Support: #123 - Name 456 ka
+      if (line.includes('#') && line.includes('ka')) {
+        const cleanLine = line.replace(/#[\d,]+ - /, '').trim();
+        const kaMatch = cleanLine.match(/([\d,]+)\s*ka/);
+        if (kaMatch) {
+          kakera = parseInt(kaMatch[1].replace(/,/g, ''));
+          name = cleanLine.replace(kaMatch[0], '').trim();
+        }
+      } 
+      // Original Format: Name · Series · Kakera
+      else if (line.includes('·')) {
+        const parts = line.replace(/:[^:]+:/g, '').split('·').map(p => p.trim());
+        name = parts[0];
+        series = parts[1] || "Unknown";
+        kakera = parts[2] ? parseInt(parts[2].replace(/,/g, '').replace('ka', '')) : 0;
+      }
+
+      if (!name) return null;
+      return { 
+        name, 
+        series, 
+        kakera, 
+        keys: line.match(/\((\d+)\)/) ? line.match(/\((\d+)\)/)[1] : 0 
       };
     }).filter(Boolean);
 
@@ -47,7 +64,7 @@ export default function MudaeHub() {
     }, { merge: true });
     
     setInputText('');
-    alert("Import Successful!");
+    alert(`Imported ${newCharacters.length} characters!`);
   };
 
   const createProfile = async () => {
@@ -145,11 +162,11 @@ export default function MudaeHub() {
 
         <div className="lg:col-span-3">
           <div className="flex justify-between items-end mb-6">
-            <h2 className="text-3xl font-bold text-white">{activeProfile || 'No Profile'}</h2>
+            <h2 className="text-3xl font-bold text-white uppercase tracking-tighter">{activeProfile || 'No Profile'}</h2>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-4">
             {filteredChars.map((char, i) => (
-              <div key={i} className="group bg-slate-800/40 border border-slate-700 rounded-xl overflow-hidden hover:border-pink-500/50 transition-all">
+              <div key={i} className="group bg-slate-800/40 border border-slate-700 rounded-xl overflow-hidden hover:border-pink-500/50 transition-all shadow-lg">
                 <div className="aspect-[2/3] relative overflow-hidden bg-slate-900">
                   <img 
                     src={`/api/mudae?name=${encodeURIComponent(char.name)}`} 
@@ -161,9 +178,9 @@ export default function MudaeHub() {
                     {char.kakera} ka
                   </div>
                   {char.keys > 0 && (
-                    <div className="absolute top-2 right-2 bg-pink-600 px-1.5 py-0.5 rounded text-[10px] font-bold text-white">🔑 {char.keys}</div>
+                    <div className="absolute top-2 right-2 bg-pink-600 px-1.5 py-0.5 rounded text-[10px] font-bold text-white shadow-lg">🔑 {char.keys}</div>
                   )}
-                  <button onClick={() => toggleTradeTag(char.series)} className={`absolute bottom-2 right-2 p-1.5 rounded-lg backdrop-blur-md transition-all ${profiles[activeProfile]?.tradeTags?.includes(char.series) ? 'bg-green-500 text-white' : 'bg-black/40 text-white/50'}`}>
+                  <button onClick={() => toggleTradeTag(char.series)} className={`absolute bottom-2 right-2 p-1.5 rounded-lg backdrop-blur-md transition-all shadow-md ${profiles[activeProfile]?.tradeTags?.includes(char.series) ? 'bg-green-500 text-white' : 'bg-black/40 text-white/50 hover:bg-black/60'}`}>
                     <Tag size={14}/>
                   </button>
                 </div>
@@ -171,7 +188,7 @@ export default function MudaeHub() {
                   <h4 className="text-xs font-bold text-white truncate">{char.name}</h4>
                   <p className="text-[10px] text-slate-500 truncate">{char.series}</p>
                   {profiles[activeProfile]?.tradeTags?.includes(char.series) && (
-                    <span className="inline-block mt-2 text-[9px] font-bold text-green-400 border border-green-400/30 bg-green-400/10 px-1.5 py-0.5 rounded uppercase">For Trade</span>
+                    <span className="inline-block mt-2 text-[9px] font-bold text-green-400 border border-green-400/30 bg-green-400/10 px-1.5 py-0.5 rounded uppercase tracking-wider">For Trade</span>
                   )}
                 </div>
               </div>
