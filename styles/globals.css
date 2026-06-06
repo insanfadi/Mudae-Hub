@@ -2,14 +2,37 @@
 @tailwind components;
 @tailwind utilities;
 
-@layer base {
-  body {
-    @apply bg-[#0b0f1a] text-slate-300 selection:bg-pink-500/30 selection:text-pink-200;
-    -webkit-tap-highlight-color: transparent;
-  }
+/* Sets the base background for the whole site */
+body {
+  background-color: #0b0f1a;
+  color: #cbd5e1;
+  overflow-x: hidden;
 }
 
-/* Prevents images from flickering white before they load */
-img {
-  background-color: #0f172a;
+/* 
+   FIX: The "Ugly White Box" bug.
+   This prevents Chrome from turning your password input white 
+   when it remembers your "AhmadMudae2026" password.
+*/
+input:-webkit-autofill,
+input:-webkit-autofill:hover, 
+input:-webkit-autofill:focus {
+  -webkit-text-fill-color: white !important;
+  -webkit-box-shadow: 0 0 0px 1000px #111622 inset !important;
+  transition: background-color 5000s ease-in-out 0s;
+}
+
+/* Custom Sleek Scrollbar for your Harem list */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #0b0f1a;
+}
+::-webkit-scrollbar-thumb {
+  background: #1e293b;
+  border-radius: 10px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #db2777; /* Turns pink when you scroll */
 }
