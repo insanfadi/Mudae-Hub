@@ -5,14 +5,14 @@ import { Search, Lock, Unlock, Tag, Trash2, X, RefreshCw, Users, CheckCircle2, A
 
 const CharacterCard = React.memo(({ char, isUnlocked, onToggleTrade, onDelete, isTagged }) => {
   const [imgError, setImgError] = useState(false);
-  // We use a key based on the series to force an image reload when the series is fixed
-  const imgUrl = `/api/mudae?name=${encodeURIComponent(char.name)}&v=${char.series === 'Unknown' ? '0' : '1'}`;
+  // Force image refresh when series changes from Unknown
+  const imgUrl = `/api/mudae?name=${encodeURIComponent(char.name)}&series=${encodeURIComponent(char.series || 'unknown')}`;
 
   return (
     <div className="group relative bg-[#1a202c] rounded-xl border border-slate-800 hover:border-pink-500 transition-all overflow-hidden shadow-lg">
       <div className="aspect-[2/3] relative bg-[#0b0f1a]">
         <img 
-          src={imgError ? `https://via.placeholder.com/225x350?text=${encodeURIComponent(char.name)}` : imgUrl} 
+          src={imgError ? `https://via.placeholder.com/225x350?text=Reloading` : imgUrl} 
           alt={char.name} 
           className="w-full h-full object-cover transition-transform group-hover:scale-105" 
           onError={() => setImgError(true)}
@@ -65,32 +65,29 @@ export default function MudaeHub() {
     const allChars = [...(profiles[activeProfile]?.characters || [])];
     const targets = allChars.filter(c => !c.series || c.series.toLowerCase().includes('unknown'));
     
-    if (targets.length === 0) return alert("Everything looks fixed!");
+    if (targets.length === 0) return alert("Everything is synced!");
     
     setIsFixing(true); setProgress(0);
 
-    // Process in small batches to avoid API timeouts
-    for (let i = 0; i < targets.length; i += 3) {
-      const batch = targets.slice(i, i + 3);
-      await Promise.all(batch.map(async (char) => {
-        try {
-          const res = await fetch(`/api/mudae?name=${encodeURIComponent(char.name)}&info=true`);
-          const data = await res.json();
-          const idx = allChars.findIndex(c => c.id === char.id);
-          if (idx !== -1 && data.series && !data.series.toLowerCase().includes('unknown')) {
-            allChars[idx].series = data.series;
-            // Also update image logic if needed
+    // CRITICAL: We now process 1 by 1 with a 2-second delay to avoid MAL's "Rate Limit" blocks
+    for (let i = 0; i < targets.length; i++) {
+      const char = targets[i];
+      try {
+        const res = await fetch(`/api/mudae?name=${encodeURIComponent(char.name)}&info=true`);
+        const data = await res.json();
+        const idx = allChars.findIndex(c => c.id === char.id);
+        
+        if (idx !== -1 && data.series && !data.series.toLowerCase().includes('unknown')) {
+          allChars[idx].series = data.series;
+          // Partial update to Firebase every 5 chars so we don't lose progress
+          if (i % 5 === 0) {
+            await updateDoc(doc(db, "profiles", activeProfile), { characters: allChars });
           }
-        } catch (e) {}
-      }));
+        }
+      } catch (e) { console.error("Sync error for " + char.name); }
       
-      setProgress(i + batch.length);
-      // Save progress to Firebase every 15 characters
-      if (i % 15 === 0) {
-        await updateDoc(doc(db, "profiles", activeProfile), { characters: allChars });
-      }
-      // Wait 1.5 seconds between batches to respect Jikan API rate limits
-      await new Promise(r => setTimeout(r, 1500));
+      setProgress(i + 1);
+      await new Promise(r => setTimeout(r, 2000)); // 2 second pause between characters
     }
 
     await updateDoc(doc(db, "profiles", activeProfile), { characters: allChars });
@@ -124,14 +121,14 @@ export default function MudaeHub() {
     <div className="min-h-screen bg-[#0b0f1a] text-slate-300 flex flex-col md:flex-row">
       <aside className="w-full md:w-64 bg-[#0f172a] border-r border-slate-800 p-6 space-y-8 shrink-0 z-50">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-pink-600 rounded-xl flex items-center justify-center text-white font-black italic shadow-lg shadow-pink-600/30 text-xl">M</div>
+          <div className="w-10 h-10 bg-pink-600 rounded-xl flex items-center justify-center text-white font-black italic shadow-lg text-xl">M</div>
           <h1 className="text-sm font-black text-white uppercase italic">Mudae Hub</h1>
         </div>
         <nav className="space-y-2">
           {Object.keys(profiles).map(name => (
             <button key={name} onClick={() => setActiveProfile(name)} className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-xs font-black transition-all ${activeProfile === name ? 'bg-pink-600 text-white shadow-xl' : 'text-slate-400 hover:bg-white/5'}`}>
               <div className="flex items-center gap-3"><Users size={14}/> {name}</div>
-              {isUnlocked && activeProfile === name && <Trash2 size={14} className="opacity-40 hover:opacity-100" onClick={(e) => { e.stopPropagation(); if(confirm('Delete?')) deleteDoc(doc(db, "profiles", name)); }}/>}
+              {isUnlocked && activeProfile === name && <Trash2 size={14} className="opacity-40 hover:opacity-100" onClick={(e) => { e.stopPropagation(); if(confirm('Delete Profile?')) deleteDoc(doc(db, "profiles", name)); }}/>}
             </button>
           ))}
           <button onClick={() => { const n = prompt("Name?"); if(n) setDoc(doc(db, "profiles", n), { characters: [], tradeTags: [] }); }} className="w-full border border-dashed border-slate-700 py-3 rounded-xl text-[10px] font-black uppercase text-slate-500 mt-6">+ Add Friend</button>
@@ -139,9 +136,9 @@ export default function MudaeHub() {
       </aside>
 
       <main className="flex-1 p-4 md:p-12 overflow-y-auto">
-        <header className="flex flex-col xl:flex-row justify-between gap-8 mb-16 items-center text-center xl:text-left">
+        <header className="flex flex-col xl:flex-row justify-between gap-8 mb-16 items-center">
           <div>
-            <h2 className="text-7xl font-black text-white italic uppercase tracking-tighter">{activeProfile || 'Ready'}</h2>
+            <h2 className="text-7xl font-black text-white italic uppercase tracking-tighter leading-none">{activeProfile || 'Select'}</h2>
             <div className="flex gap-4 mt-4 justify-center xl:justify-start">
               <span className="text-[10px] font-black text-slate-500 uppercase">{sortedChars.length} CHARS</span>
               <button onClick={() => setSortMode(sortMode === 'kakera' ? 'name' : 'kakera')} className="text-[10px] font-black text-pink-500 uppercase flex items-center gap-2"><ArrowUpDown size={10}/> {sortMode}</button>
@@ -154,20 +151,20 @@ export default function MudaeHub() {
             </div>
             <button onClick={smartFixer} disabled={!isUnlocked || isFixing} className="bg-blue-600 hover:bg-blue-500 disabled:bg-slate-800 text-white px-8 py-4 rounded-2xl text-[11px] font-black uppercase flex items-center gap-3">
               {isFixing ? <RefreshCw size={16} className="animate-spin"/> : <CheckCircle2 size={16}/>}
-              {isFixing ? `SYNCING: ${progress}` : 'Deep Sync Harem'}
+              {isFixing ? `SYNCING: ${progress} / ${targets.length}` : 'High-Quality Sync'}
             </button>
           </div>
         </header>
 
         <section className="grid grid-cols-1 lg:grid-cols-4 gap-12">
-          <div className="lg:col-span-1 space-y-8">
+          <div className="lg:col-span-1">
             <div className="bg-[#111622] border border-slate-800 p-6 rounded-3xl space-y-6 shadow-2xl sticky top-10">
               <div className="relative">
                 <Search className="absolute left-4 top-4 text-slate-600" size={16}/>
                 <input className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-4 pl-12 pr-4 text-xs outline-none focus:border-pink-500 font-bold" placeholder="Search..." onChange={(e) => setSearch(e.target.value)} />
               </div>
               <textarea className="w-full bg-slate-950 border border-slate-800 rounded-2xl p-4 text-[10px] h-40 outline-none font-mono" placeholder="Paste $mms l- k" value={inputText} onChange={(e) => setInputText(e.target.value)} />
-              <button onClick={handleImport} disabled={!isUnlocked} className="w-full bg-pink-600 hover:bg-pink-500 py-4 rounded-2xl text-xs font-black text-white uppercase transition-all shadow-xl shadow-pink-600/30">Import</button>
+              <button onClick={handleImport} disabled={!isUnlocked} className="w-full bg-pink-600 hover:bg-pink-500 py-4 rounded-2xl text-xs font-black text-white uppercase shadow-xl">Import</button>
             </div>
           </div>
           <div className="lg:col-span-3 grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4 md:gap-6">
