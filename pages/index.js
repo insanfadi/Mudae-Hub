@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { db } from '../lib/firebase';
 import { doc, setDoc, onSnapshot, collection, updateDoc, arrayUnion, arrayRemove, deleteDoc } from 'firebase/firestore';
-import { Search, Lock, Unlock, Tag, Trash2, X, RefreshCw, Users, CheckCircle2, ArrowUpDown, UserPlus, Heart } from 'lucide-react';
+import { Search, Lock, Unlock, Tag, Trash2, X, RefreshCw, Users, CheckCircle2, ArrowUpDown, UserPlus, Heart, Star, ListFilter } from 'lucide-react';
 
 const CharacterCard = React.memo(({ char, isUnlocked, onToggleTrade, onDelete, isTagged }) => {
   const [imgError, setImgError] = useState(false);
@@ -26,7 +26,8 @@ const CharacterCard = React.memo(({ char, isUnlocked, onToggleTrade, onDelete, i
             <X size={20}/>
           </button>
         )}
-        <button onClick={() => onToggleTrade(char.series)} className={`absolute bottom-5 right-5 p-4 rounded-[20px] backdrop-blur-xl transition-all z-20 ${isTagged ? 'bg-pink-600 text-white shadow-pink-600/50 shadow-lg scale-110' : 'bg-white/5 text-white/20 hover:bg-white/10'}`}>
+        {/* SOLO TRADE TAG - USES CHAR.ID NOW */}
+        <button onClick={() => onToggleTrade(char.id)} className={`absolute bottom-5 right-5 p-4 rounded-[20px] backdrop-blur-xl transition-all z-20 ${isTagged ? 'bg-pink-600 text-white shadow-pink-600/50 shadow-lg scale-110' : 'bg-white/5 text-white/20 hover:bg-white/10'}`}>
           <Tag size={22}/>
         </button>
       </div>
@@ -44,6 +45,7 @@ export default function MudaeHub() {
   const [profiles, setProfiles] = useState({});
   const [activeProfile, setActiveProfile] = useState('');
   const [inputText, setInputText] = useState('');
+  const [wishlistText, setWishlistText] = useState('');
   const [passwordInput, setPasswordInput] = useState('');
   const [isUnlocked, setIsUnlocked] = useState(false);
   const [search, setSearch] = useState('');
@@ -103,9 +105,28 @@ export default function MudaeHub() {
 
   const sortedChars = useMemo(() => {
     let chars = [...(profiles[activeProfile]?.characters || [])];
-    if (search) chars = chars.filter(c => c.name.toLowerCase().includes(search.toLowerCase()) || c.series?.toLowerCase().includes(search.toLowerCase()));
+    
+    // 1. Filter by Text Search (Name or Series)
+    if (search) {
+      chars = chars.filter(c => 
+        c.name.toLowerCase().includes(search.toLowerCase()) || 
+        c.series?.toLowerCase().includes(search.toLowerCase())
+      );
+    }
+
+    // 2. NEW: Filter by Series Wishlist
+    const wishedSeries = wishlistText.split('\n').map(s => s.trim().toLowerCase()).filter(s => s);
+    if (wishedSeries.length > 0) {
+      chars = chars.filter(c => 
+        wishedSeries.some(wish => c.series?.toLowerCase().includes(wish))
+      );
+    }
+
     return chars.sort((a, b) => sortMode === 'kakera' ? b.kakera - a.kakera : a.name.localeCompare(b.name));
-  }, [profiles, activeProfile, search, sortMode]);
+  }, [profiles, activeProfile, search, wishlistText, sortMode]);
+
+  // CALC TOTAL KAKERA FOR CURRENT VIEW
+  const totalValue = useMemo(() => sortedChars.reduce((sum, c) => sum + (c.kakera || 0), 0), [sortedChars]);
 
   return (
     <div className="min-h-screen bg-[#0b0f1a] text-slate-300 flex flex-col md:flex-row font-sans">
@@ -133,14 +154,14 @@ export default function MudaeHub() {
       </aside>
 
       <main className="flex-1 p-8 md:p-16 overflow-y-auto bg-gradient-to-br from-[#0b0f1a] to-[#0f172a]">
-        <header className="flex flex-col xl:flex-row justify-between gap-10 mb-20 items-center">
+        <header className="flex flex-col xl:flex-row justify-between gap-10 mb-12 items-center">
           <div className="text-center xl:text-left">
             <h2 className="text-7xl font-black text-white italic uppercase tracking-tighter leading-none drop-shadow-2xl">{activeProfile || 'Select'}</h2>
             <div className="flex gap-8 mt-6 justify-center xl:justify-start items-center">
-              <span className="bg-slate-900 border-2 border-slate-800 px-6 py-2 rounded-full text-[14px] font-black text-slate-400 uppercase tracking-widest">{sortedChars.length} CHARS</span>
+              <span className="bg-slate-900 border-2 border-slate-800 px-6 py-2 rounded-full text-[14px] font-black text-slate-400 uppercase tracking-widest">{sortedChars.length} FOUND</span>
+              <span className="bg-pink-900/20 border-2 border-pink-500/20 px-6 py-2 rounded-full text-[14px] font-black text-pink-500 uppercase tracking-widest">{totalValue.toLocaleString()} KA</span>
               <div className="flex items-center gap-4">
-                <span className="text-[12px] font-black text-slate-600 uppercase tracking-widest">Sort:</span>
-                <button onClick={() => setSortMode(sortMode === 'kakera' ? 'name' : 'kakera')} className="text-[15px] font-black text-pink-500 uppercase flex items-center gap-2 hover:scale-105 transition-transform">
+                <button onClick={() => setSortMode(sortMode === 'kakera' ? 'name' : 'kakera')} className="text-[15px] font-black text-slate-400 uppercase flex items-center gap-2 hover:text-pink-500 transition-all">
                   <ArrowUpDown size={18}/> {sortMode === 'kakera' ? 'Kakera' : 'Name'}
                 </button>
               </div>
@@ -148,63 +169,76 @@ export default function MudaeHub() {
           </div>
 
           <div className="flex flex-wrap items-center gap-6 justify-center">
-            {/* WRAPPED IN FORM TO TRIGGER BROWSER "SAVE PASSWORD" FEATURE */}
-            <form 
-              onSubmit={(e) => { e.preventDefault(); handleUnlock(); }}
-              className="bg-slate-900 border-2 border-slate-800 rounded-[28px] flex items-center p-2.5 shadow-2xl focus-within:border-pink-600 transition-all"
-            >
-              {/* HIDDEN USERNAME FIELD LETS CHROME KNOW WHICH ROLLER THIS IS FOR */}
+            <form onSubmit={(e) => { e.preventDefault(); handleUnlock(); }} className="bg-slate-900 border-2 border-slate-800 rounded-[28px] flex items-center p-2.5 shadow-2xl focus-within:border-pink-600 transition-all">
               <input type="text" name="username" value={activeProfile} readOnly className="hidden" autoComplete="username" />
-              
-              <input 
-                type="password" 
-                name="password"
-                id="password"
-                placeholder="PASSWORD" 
-                value={passwordInput} 
-                autoComplete="current-password"
-                className="bg-transparent px-6 w-48 text-sm outline-none font-black tracking-[0.2em] text-white placeholder:text-slate-700" 
-                onChange={(e) => setPasswordInput(e.target.value)} 
-              />
-              <button 
-                type="submit"
-                className={`p-3.5 rounded-2xl transition-all duration-500 ${isUnlocked ? 'bg-green-500 text-white shadow-lg rotate-[360deg]' : 'bg-slate-800 text-slate-500 hover:text-white'}`}
-              >
-                <Unlock size={24}/>
-              </button>
+              <input type="password" name="password" placeholder="PASSWORD" value={passwordInput} autoComplete="current-password" className="bg-transparent px-6 w-48 text-sm outline-none font-black tracking-[0.2em] text-white placeholder:text-slate-700" onChange={(e) => setPasswordInput(e.target.value)} />
+              <button type="submit" className={`p-3.5 rounded-2xl transition-all duration-500 ${isUnlocked ? 'bg-green-500 text-white shadow-lg rotate-[360deg]' : 'bg-slate-800 text-slate-500 hover:text-white'}`}><Unlock size={24}/></button>
             </form>
-
-            <button 
-              onClick={smartFixer} 
-              disabled={!isUnlocked || isFixing} 
-              className="bg-blue-600 hover:bg-blue-500 disabled:bg-slate-900 text-white px-14 py-5 rounded-[32px] text-[16px] font-black uppercase tracking-widest flex items-center gap-6 shadow-2xl shadow-blue-600/20 active:scale-95 transition-all min-w-[240px] justify-center"
-            >
+            <button onClick={smartFixer} disabled={!isUnlocked || isFixing} className="bg-blue-600 hover:bg-blue-500 disabled:bg-slate-900 text-white px-10 py-5 rounded-[32px] text-[16px] font-black uppercase tracking-widest flex items-center gap-6 shadow-2xl shadow-blue-600/20 transition-all active:scale-95 min-w-[240px] justify-center">
               {isFixing ? <RefreshCw size={22} className="animate-spin"/> : <CheckCircle2 size={22}/>}
-              {isFixing ? `FIXING: ${Math.min(progress, totalToFix)} / ${totalToFix}` : 'Scan Harem'}
+              {isFixing ? `FIXING: ${progress}` : 'Scan Harem'}
             </button>
           </div>
         </header>
 
-        <section className="grid grid-cols-1 lg:grid-cols-4 gap-16">
-          <div className="lg:col-span-1">
+        <section className="grid grid-cols-1 lg:grid-cols-4 gap-12">
+          {/* CONTROL PANEL */}
+          <div className="lg:col-span-1 space-y-8">
             <div className="bg-[#111622]/90 backdrop-blur-3xl border-2 border-slate-800 p-8 rounded-[32px] space-y-8 shadow-2xl sticky top-10">
+              {/* SEARCH */}
               <div className="relative">
                 <Search className="absolute left-6 top-6 text-slate-600" size={22}/>
                 <input className="w-full bg-slate-950 border-2 border-slate-800 rounded-[20px] py-5 pl-16 pr-8 text-base outline-none focus:border-pink-500 font-bold transition-all shadow-inner" placeholder="Quick Search..." onChange={(e) => setSearch(e.target.value)} />
               </div>
+
+              {/* WISHLIST SECTION */}
               <div className="space-y-4">
+                <div className="flex items-center gap-2 ml-2">
+                  <Star size={14} className="text-orange-500 fill-orange-500"/>
+                  <p className="text-[12px] font-black text-slate-500 uppercase tracking-widest">Series Wishlist</p>
+                </div>
+                <textarea 
+                  className="w-full bg-slate-950 border-2 border-slate-800 rounded-[20px] p-5 text-[13px] h-40 outline-none font-mono focus:border-orange-500 text-orange-400" 
+                  placeholder="Paste series names here... (One per line)" 
+                  value={wishlistText} 
+                  onChange={(e) => setWishlistText(e.target.value)} 
+                />
+                {wishlistText && (
+                  <button onClick={() => setWishlistText('')} className="text-[10px] font-bold text-slate-600 hover:text-white uppercase tracking-widest ml-2">Clear Wishlist</button>
+                )}
+              </div>
+
+              {/* IMPORT */}
+              <div className="space-y-4 border-t border-slate-800 pt-8">
                 <p className="text-[12px] font-black text-slate-500 uppercase tracking-widest ml-2">Import Data</p>
-                <textarea className="w-full bg-slate-950 border-2 border-slate-800 rounded-[20px] p-5 text-[13px] h-52 outline-none font-mono focus:border-pink-600 text-pink-500" placeholder="$mms l- k" value={inputText} onChange={(e) => setInputText(e.target.value)} />
-                <button onClick={() => { const news = inputText.split('\n').map(l => { const k = l.match(/([\d,]+)\s*ka/); if (!k) return null; return { name: l.replace(/#[\d,]+ - /, '').split(k[0])[0].trim(), series: "Unknown", kakera: parseInt(k[1].replace(/,/g, '')), id: Math.random().toString(36).substr(2, 9) }; }).filter(Boolean); updateDoc(doc(db, "profiles", activeProfile), { characters: arrayUnion(...news) }); setInputText(''); }} disabled={!isUnlocked} className="w-full bg-pink-600 hover:bg-pink-500 py-5 rounded-[20px] text-[15px] font-black text-white uppercase shadow-2xl">Import Chars</button>
+                <textarea className="w-full bg-slate-950 border-2 border-slate-800 rounded-[20px] p-5 text-[13px] h-32 outline-none font-mono focus:border-pink-600 text-pink-500" placeholder="$mms l- k" value={inputText} onChange={(e) => setInputText(e.target.value)} />
+                <button onClick={() => { 
+                  const news = inputText.split('\n').map(l => { 
+                    const k = l.match(/([\d,]+)\s*ka/); 
+                    if (!k) return null; 
+                    return { name: l.replace(/#[\d,]+ - /, '').split(k[0])[0].trim(), series: "Unknown", kakera: parseInt(k[1].replace(/,/g, '')), id: Math.random().toString(36).substr(2, 9) }; 
+                  }).filter(Boolean); 
+                  updateDoc(doc(db, "profiles", activeProfile), { characters: arrayUnion(...news) }); 
+                  setInputText(''); 
+                }} disabled={!isUnlocked} className="w-full bg-pink-600 hover:bg-pink-500 py-5 rounded-[20px] text-[15px] font-black text-white uppercase shadow-2xl">Import Chars</button>
               </div>
             </div>
           </div>
+
+          {/* GRID VIEW */}
           <div className="lg:col-span-3 grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-10">
             {sortedChars.map((c) => (
-              <CharacterCard key={c.id} char={c} isUnlocked={isUnlocked} onDelete={(char) => updateDoc(doc(db, "profiles", activeProfile), { characters: arrayRemove(char) })} onToggleTrade={(s) => {
-                  const t = profiles[activeProfile]?.tradeTags?.includes(s);
-                  updateDoc(doc(db, "profiles", activeProfile), { tradeTags: t ? arrayRemove(s) : arrayUnion(s) });
-                }} isTagged={profiles[activeProfile]?.tradeTags?.includes(c.series)} 
+              <CharacterCard 
+                key={c.id} 
+                char={c} 
+                isUnlocked={isUnlocked} 
+                onDelete={(char) => updateDoc(doc(db, "profiles", activeProfile), { characters: arrayRemove(char) })} 
+                onToggleTrade={(cid) => {
+                  const currentTags = profiles[activeProfile]?.tradeTags || [];
+                  const isTagged = currentTags.includes(cid);
+                  updateDoc(doc(db, "profiles", activeProfile), { tradeTags: isTagged ? arrayRemove(cid) : arrayUnion(cid) });
+                }} 
+                isTagged={profiles[activeProfile]?.tradeTags?.includes(c.id)} 
               />
             ))}
           </div>
