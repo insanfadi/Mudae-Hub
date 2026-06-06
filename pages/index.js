@@ -60,8 +60,7 @@ export default function MudaeHub() {
     if (!isUnlocked || isFixing) return;
     const allChars = [...(profiles[activeProfile]?.characters || [])];
     const targets = forceAll ? allChars : allChars.filter(c => !c.series || c.series.toLowerCase().includes('unknown'));
-    if (targets.length === 0) return alert("All fixed!");
-
+    if (targets.length === 0) return alert("Everything is fixed!");
     setIsFixing(true); setTotalToFix(targets.length); setProgress(0);
     const BATCH_SIZE = 3; 
     for (let i = 0; i < targets.length; i += BATCH_SIZE) {
@@ -118,24 +117,28 @@ export default function MudaeHub() {
           </div>
 
           <div className="flex flex-wrap items-center gap-6 justify-center">
-            {/* CLEANED UP PASSWORD FORM */}
+            {/* DYNAMIC PASSWORD FORM - SHRINKS WHEN UNLOCKED */}
             <form onSubmit={(e) => { e.preventDefault(); handleUnlock(); }} className="bg-slate-900/50 border-2 border-slate-800 rounded-[28px] flex items-center p-2.5 shadow-2xl focus-within:border-pink-600 transition-all">
               <input type="text" name="username" value={activeProfile} readOnly className="hidden" autoComplete="username" />
-              <input type="password" name="password" placeholder="PASSWORD" value={passwordInput} autoComplete="current-password" 
-                className="bg-transparent px-6 w-48 text-sm outline-none font-black tracking-[0.2em] text-white placeholder:text-slate-700 selection:bg-pink-500/30" 
-                onChange={(e) => setPasswordInput(e.target.value)} 
-              />
-              <button type="submit" className={`p-3.5 rounded-2xl transition-all duration-500 ${isUnlocked ? 'bg-green-500 text-white shadow-lg rotate-[360deg]' : 'bg-slate-800 text-slate-500 hover:text-white'}`}><Unlock size={24}/></button>
+              
+              {!isUnlocked && (
+                <input type="password" name="password" placeholder="PASSWORD" value={passwordInput} autoComplete="current-password" 
+                  className="bg-transparent px-6 w-48 text-sm outline-none font-black tracking-[0.2em] text-white placeholder:text-slate-700 selection:bg-pink-500/30" 
+                  onChange={(e) => setPasswordInput(e.target.value)} 
+                />
+              )}
+              
+              <button type="submit" className={`p-3.5 rounded-2xl transition-all duration-500 ${isUnlocked ? 'bg-green-500 text-white shadow-lg rotate-[360deg]' : 'bg-slate-800 text-slate-500 hover:text-white'}`}>
+                {isUnlocked ? <Unlock size={24}/> : <Lock size={24}/>}
+              </button>
             </form>
             
             <div className="flex flex-col gap-3">
-              {/* PRIMARY SCAN BUTTON */}
-              <button onClick={() => smartFixer(false)} disabled={!isUnlocked || isFixing} className="bg-blue-600 hover:bg-blue-500 disabled:bg-slate-900 text-white px-14 py-5 rounded-[28px] text-[16px] font-black uppercase tracking-widest flex items-center gap-6 shadow-2xl shadow-blue-600/20 active:scale-95 transition-all min-w-[260px] justify-center">
+              <button onClick={() => smartFixer(false)} disabled={!isUnlocked || isFixing} className="bg-blue-600 hover:bg-blue-500 disabled:bg-slate-900 text-white px-14 py-5 rounded-[32px] text-[16px] font-black uppercase tracking-widest flex items-center gap-6 shadow-2xl shadow-blue-600/20 active:scale-95 transition-all min-w-[240px] justify-center">
                 {isFixing ? <RefreshCw size={22} className="animate-spin"/> : <CheckCircle2 size={22}/>}
                 {isFixing ? `FIXING: ${progress}` : 'Scan Harem'}
               </button>
               
-              {/* SLEEK FULL RESCAN BUTTON */}
               {isUnlocked && !isFixing && (
                 <button onClick={() => {if(confirm('Refresh data for ALL characters?')) smartFixer(true)}} className="bg-slate-900/50 border-2 border-pink-600/20 hover:border-pink-600/60 text-[11px] font-black text-slate-400 hover:text-pink-500 uppercase py-3 rounded-[20px] flex items-center justify-center gap-3 transition-all tracking-widest">
                   <Zap size={14} className="fill-pink-500/20"/> FULL RESCAN
