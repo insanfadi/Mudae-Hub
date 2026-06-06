@@ -33,7 +33,7 @@ export default function MudaeHub() {
     const profileData = profiles[activeProfile];
     if (passwordInput === "AhmadMudae2026") { await updateDoc(doc(db, "profiles", activeProfile), { password: "AhmadMudae2026" }); setIsUnlocked(true); return; }
     if (!profileData.password) {
-      if (confirm(`Set "${passwordInput}" as password?`)) {
+      if (confirm(`No password for ${activeProfile}. Set password now?`)) {
         await updateDoc(doc(db, "profiles", activeProfile), { password: passwordInput });
         setIsUnlocked(true);
       }
@@ -47,7 +47,7 @@ export default function MudaeHub() {
     if (!isUnlocked || isFixing) return;
     const allChars = [...(profiles[activeProfile]?.characters || [])];
     const targets = forceAll ? allChars : allChars.filter(c => c.gender === 'none');
-    if (targets.length === 0) return alert("Harem is updated!");
+    if (targets.length === 0) return alert("Harem is clean!");
 
     setIsFixing(true); setTotalToFix(targets.length); setProgress(0);
     const BATCH_SIZE = 3; 
@@ -58,9 +58,7 @@ export default function MudaeHub() {
           const res = await fetch(`/api/mudae?name=${encodeURIComponent(char.name)}&series=${encodeURIComponent(char.series)}&info=true`);
           const data = await res.json();
           const idx = allChars.findIndex(c => c.id === char.id);
-          if (idx !== -1) {
-              allChars[idx].gender = data.gender;
-          }
+          if (idx !== -1 && data.img) { allChars[idx].gender = data.gender; }
         } catch (e) {}
       }));
       setProgress(Math.min(i + BATCH_SIZE, targets.length));
@@ -72,27 +70,42 @@ export default function MudaeHub() {
   };
 
   const handleImport = async () => {
-    if (!isUnlocked) return alert("Unlock first!");
+    if (!isUnlocked) return alert("Unlock First!");
     const lines = inputText.split('\n');
     let currentSeries = "Unknown";
     const newCharacters = [];
+    
     lines.forEach(line => {
       const l = line.trim();
       if (!l || l.includes('Click to react') || l.includes('PM]') || l.includes('AM]')) return;
       const seriesHeaderMatch = l.match(/^(.+?)\s*-\s*\d+\/\d+/);
       if (seriesHeaderMatch) { currentSeries = seriesHeaderMatch[1].trim(); return; }
+      
       if (l.startsWith('#')) {
         const rankMatch = l.match(/#([\d,]+)/);
         const kakeraMatch = l.match(/([\d,]+)\s*ka/);
         const keysMatch = l.match(/\((\d+)\)/);
         if (kakeraMatch) {
           let namePart = l.replace(/#[\d,]+ - /, '');
-          let name = namePart.split(' · ')[0].split(/[\d,]+\s*ka/)[0].trim();
-          newCharacters.push({ id: Math.random().toString(36).substr(2, 9), name, series: currentSeries, kakera: parseInt(kakeraMatch[1].replace(/,/g, '')), rank: rankMatch ? rankMatch[1] : null, keys: keysMatch ? parseInt(keysMatch[1]) : 0, gender: "none" });
+          let rawName = namePart.split(' · ')[0].split(/[\d,]+\s*ka/)[0].trim();
+          
+          // CRITICAL: Scrub the name of all emojis/symbols right now
+          let cleanName = rawName.replace(/[^\x00-\x7F]/gu, '').trim();
+
+          newCharacters.push({ 
+            id: Math.random().toString(36).substr(2, 9), 
+            name: cleanName, 
+            series: currentSeries, 
+            kakera: parseInt(kakeraMatch[1].replace(/,/g, '')), 
+            rank: rankMatch ? rankMatch[1] : null, 
+            keys: keysMatch ? parseInt(keysMatch[1]) : 0, 
+            gender: "none" 
+          });
         }
       }
     });
-    if (newCharacters.length === 0) return alert("No valid chars!");
+
+    if (newCharacters.length === 0) return alert("No valid characters found!");
     await updateDoc(doc(db, "profiles", activeProfile), { characters: arrayUnion(...newCharacters) });
     setInputText('');
     alert(`Imported ${newCharacters.length} characters!`);
@@ -153,9 +166,9 @@ export default function MudaeHub() {
             <div className="flex flex-col gap-3">
               <button onClick={() => smartFixer(false)} disabled={!isUnlocked || isFixing} className="bg-blue-600 hover:bg-blue-500 disabled:bg-slate-900 text-white px-10 py-5 rounded-[32px] text-[16px] font-black uppercase tracking-widest flex items-center gap-6 shadow-2xl active:scale-95 transition-all min-w-[240px] justify-center">
                 {isFixing ? <RefreshCw size={22} className="animate-spin"/> : <CheckCircle2 size={22}/>}
-                {isFixing ? `FIXING: ${progress}` : 'Scan Harem'}
+                {isFixing ? `FIXING: ${progress} / ${totalToFix}` : 'Scan Harem'}
               </button>
-              {isUnlocked && !isFixing && <button onClick={() => {if(confirm('Refresh ALL images?')) smartFixer(true)}} className="bg-slate-900/50 border-2 border-pink-600/20 hover:border-pink-600/60 text-[11px] font-black text-slate-400 hover:text-pink-500 uppercase py-3 rounded-[20px] flex items-center justify-center gap-3 transition-all tracking-widest"><Zap size={14}/> FULL RESCAN</button>}
+              {isUnlocked && !isFixing && <button onClick={() => {if(confirm('Refresh ALL data?')) smartFixer(true)}} className="bg-slate-900/50 border-2 border-pink-600/20 hover:border-pink-600/60 text-[11px] font-black text-slate-400 hover:text-pink-500 uppercase py-3 rounded-[20px] flex items-center justify-center gap-3 transition-all tracking-widest"><Zap size={14}/> FULL RESCAN</button>}
             </div>
           </div>
         </header>
