@@ -77,10 +77,8 @@ export default function MudaeHub() {
   const smartFixer = async () => {
     if (!isUnlocked || isFixing) return;
     const allChars = [...(profiles[activeProfile]?.characters || [])];
-    // ONLY SCAN BROKEN ONES (Saves 30 minutes of waiting!)
     const targets = allChars.filter(c => !c.series || c.series.toLowerCase().includes('unknown'));
-    if (targets.length === 0) return alert("Harem is already fully scanned!");
-
+    if (targets.length === 0) return alert("Harem is fixed!");
     setIsFixing(true); setTotalToFix(targets.length); setProgress(0);
     const BATCH_SIZE = 3; 
     for (let i = 0; i < targets.length; i += BATCH_SIZE) {
@@ -150,11 +148,32 @@ export default function MudaeHub() {
           </div>
 
           <div className="flex flex-wrap items-center gap-6 justify-center">
-            <div className="bg-slate-900 border-2 border-slate-800 rounded-[28px] flex items-center p-2.5 shadow-2xl focus-within:border-pink-600 transition-all">
-              <input type="password" placeholder="PASSWORD" value={passwordInput} className="bg-transparent px-6 w-48 text-sm outline-none font-black tracking-[0.2em] text-white placeholder:text-slate-700" onChange={(e) => setPasswordInput(e.target.value)} />
-              <button onClick={handleUnlock} className={`p-3.5 rounded-2xl transition-all duration-500 ${isUnlocked ? 'bg-green-500 text-white shadow-lg rotate-[360deg]' : 'bg-slate-800 text-slate-500 hover:text-white'}`}><Unlock size={24}/></button>
-            </div>
-            {/* FIXED SCAN HAREM BUTTON SIZE */}
+            {/* WRAPPED IN FORM TO TRIGGER BROWSER "SAVE PASSWORD" FEATURE */}
+            <form 
+              onSubmit={(e) => { e.preventDefault(); handleUnlock(); }}
+              className="bg-slate-900 border-2 border-slate-800 rounded-[28px] flex items-center p-2.5 shadow-2xl focus-within:border-pink-600 transition-all"
+            >
+              {/* HIDDEN USERNAME FIELD LETS CHROME KNOW WHICH ROLLER THIS IS FOR */}
+              <input type="text" name="username" value={activeProfile} readOnly className="hidden" autoComplete="username" />
+              
+              <input 
+                type="password" 
+                name="password"
+                id="password"
+                placeholder="PASSWORD" 
+                value={passwordInput} 
+                autoComplete="current-password"
+                className="bg-transparent px-6 w-48 text-sm outline-none font-black tracking-[0.2em] text-white placeholder:text-slate-700" 
+                onChange={(e) => setPasswordInput(e.target.value)} 
+              />
+              <button 
+                type="submit"
+                className={`p-3.5 rounded-2xl transition-all duration-500 ${isUnlocked ? 'bg-green-500 text-white shadow-lg rotate-[360deg]' : 'bg-slate-800 text-slate-500 hover:text-white'}`}
+              >
+                <Unlock size={24}/>
+              </button>
+            </form>
+
             <button 
               onClick={smartFixer} 
               disabled={!isUnlocked || isFixing} 
