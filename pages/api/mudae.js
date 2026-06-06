@@ -2,51 +2,76 @@ export default async function handler(req, res) {
   const { name, info } = req.query;
   if (!name) return res.status(400).end();
 
-  const clean = name.replace(/\(.*\)/g, '').replace(/[^\x00-\x7F]/gu, '').trim().replace(/\s+/g, ' ');
+  // Basic Clean: No emojis, no Mudae tags like (BP)
+  const baseClean = name
+    .replace(/\(.*\)/g, '')          
+    .replace(/[^\x00-\x7F]/gu, '')   
+    .trim();
+
+  // STUBBORN SEARCH VARIATIONS
+  const variations = [
+    baseClean,                                      // 1. "OMGkawaii Angel-chan"
+    baseClean.replace(/\s+/g, ''),                  // 2. "OMGkawaiiAngel-chan" (Fixes the space trap)
+    baseClean.split(' ').slice(-2).join(' ')        // 3. "Angel-chan" (Takes core name only)
+  ];
+
   const headers = { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0 Safari/537.36' };
 
-  try {
-    let img = "";
-    let series = "Unknown Series";
-
+  const fetchFromAniList = async (term) => {
     try {
-      const aniRes = await fetch('https://graphql.anilist.co', {
+      const res = await fetch('https://graphql.anilist.co', {
         method: 'POST',
         headers: { ...headers, 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           query: `query($s:String){Character(search:$s){image{large}media(perPage:1){nodes{title{userPreferred}}}}} `, 
-          variables: { s: clean } 
+          variables: { s: term } 
         })
       });
-      const ani = await aniRes.json();
-      if (ani.data?.Character) {
-        img = ani.data.Character.image.large;
-        series = ani.data.Character.media.nodes[0]?.title.userPreferred || "Unknown Series";
-      }
-    } catch (e) {}
+      const data = await res.json();
+      return data.data?.Character ? {
+        img: data.data.Character.image.large,
+        series: data.data.Character.media.nodes[0]?.title.userPreferred || "Unknown"
+      } : null;
+    } catch (e) { return null; }
+  };
 
-    if (!img || series === "Unknown Series") {
+  try {
+    let result = null;
+
+    // Try each variation until one works
+    for (const term of variations) {
+      if (term.length < 2) continue; // Skip single letters
+      result = await fetchFromAniList(term);
+      if (result) break; 
+    }
+
+    // FINAL FALLBACK: If AniList totally fails, try a direct Jikan (MAL) search
+    if (!result) {
       try {
-        const jikanRes = await fetch(`https://api.jikan.moe/v4/characters?q=${encodeURIComponent(clean)}&limit=1`, { headers });
-        const jikanData = await jikanRes.json();
-        if (jikanData.data?.length > 0) {
-          const char = jikanData.data[0];
-          img = img || char.images.jpg.image_url;
-          const fullRes = await fetch(`https://api.jikan.moe/v4/characters/${char.mal_id}/full`, { headers });
-          const fullData = await fullRes.json();
-          if (series === "Unknown Series") {
-            series = fullData.data.anime?.[0]?.anime?.title || fullData.data.manga?.[0]?.manga?.title || "Unknown Series";
-          }
+        const malRes = await fetch(`https://api.jikan.moe/v4/characters?q=${encodeURIComponent(variations[0])}&limit=1`, { headers });
+        const malData = await malRes.json();
+        if (malData.data?.[0]) {
+          result = {
+            img: malData.data[0].images.jpg.image_url,
+            series: "Unknown (Found on MAL)" 
+          };
         }
       } catch (e) {}
     }
 
-    if (info) return res.status(200).json({ series, img });
+    if (info) return res.status(200).json(result || { series: "Unknown Series", img: "" });
 
-    const finalImg = (!img || img.includes('questionmark')) ? `https://via.placeholder.com/225x350?text=${encodeURIComponent(clean)}` : img;
+    // Serve Image
+    const finalImg = (result?.img && !result.img.includes('questionmark')) 
+      ? result.img 
+      : `https://via.placeholder.com/225x350?text=${encodeURIComponent(baseClean)}`;
+      
     const imageRes = await fetch(finalImg, { headers });
     res.setHeader('Content-Type', 'image/jpeg');
     res.setHeader('Cache-Control', 'public, s-maxage=31536000, immutable');
     return res.send(Buffer.from(await imageRes.arrayBuffer()));
-  } catch (e) { return res.status(200).json({ series: "Unknown Series", img: "" }); }
+    
+  } catch (e) { 
+    return res.status(200).json({ series: "Unknown Series", img: "" }); 
+  }
 }
