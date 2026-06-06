@@ -17,63 +17,37 @@ export default function MudaeHub() {
   const [totalToFix, setTotalToFix] = useState(0);
   const [sortMode, setSortMode] = useState('kakera');
 
-  // Load profiles from Firestore
   useEffect(() => {
     const unsub = onSnapshot(collection(db, "profiles"), (s) => {
       const d = {}; s.forEach(doc => d[doc.id] = doc.data());
       setProfiles(d);
-      // Auto-select first profile if none active
-      if (!activeProfile && Object.keys(d).length > 0) {
-        setActiveProfile(Object.keys(d)[0]);
-      }
+      if (!activeProfile && Object.keys(d).length > 0) setActiveProfile(Object.keys(d)[0]);
     });
     return () => unsub();
   }, [activeProfile]);
 
-  // Reset lock status when switching profiles
-  useEffect(() => {
-    setIsUnlocked(false);
-    setPasswordInput('');
-  }, [activeProfile]);
+  useEffect(() => { setIsUnlocked(false); setPasswordInput(''); }, [activeProfile]);
 
   const handleUnlock = async () => {
-    if (!activeProfile) return alert("Please select a profile first!");
-    
+    if (!activeProfile) return alert("Select profile!");
     const profileData = profiles[activeProfile];
-    
-    // Safety check if profile exists in data
-    if (!profileData) return alert("Profile data not found!");
-
-    // 1. Master Recovery Bypass
-    if (passwordInput === "AhmadMudae2026") {
-      await updateDoc(doc(db, "profiles", activeProfile), { password: "AhmadMudae2026" });
-      setIsUnlocked(true);
-      return;
-    }
-
-    // 2. Claim Mode (If profile has no password yet)
-    if (!profileData.password || profileData.password === "") {
-      if (passwordInput.length < 4) return alert("Please enter a password at least 4 characters long to set it.");
-      if (confirm(`Set "${passwordInput}" as the permanent password for ${activeProfile}?`)) {
+    if (passwordInput === "AhmadMudae2026") { await updateDoc(doc(db, "profiles", activeProfile), { password: "AhmadMudae2026" }); setIsUnlocked(true); return; }
+    if (!profileData.password) {
+      if (confirm(`Set "${passwordInput}" as password?`)) {
         await updateDoc(doc(db, "profiles", activeProfile), { password: passwordInput });
         setIsUnlocked(true);
       }
       return;
     }
-    
-    // 3. Normal Password Check
-    if (passwordInput === profileData.password) {
-      setIsUnlocked(true);
-    } else {
-      alert("Wrong Password! Try again.");
-    }
+    if (passwordInput === profileData.password) setIsUnlocked(true);
+    else alert("Wrong Password!");
   };
 
   const smartFixer = async (forceAll = false) => {
     if (!isUnlocked || isFixing) return;
     const allChars = [...(profiles[activeProfile]?.characters || [])];
-    const targets = forceAll ? allChars : allChars.filter(c => !c.series || c.series.toLowerCase().includes('unknown') || c.gender === 'none');
-    if (targets.length === 0) return alert("Harem is fully synced!");
+    const targets = forceAll ? allChars : allChars.filter(c => c.gender === 'none');
+    if (targets.length === 0) return alert("Harem is updated!");
 
     setIsFixing(true); setTotalToFix(targets.length); setProgress(0);
     const BATCH_SIZE = 3; 
@@ -84,7 +58,9 @@ export default function MudaeHub() {
           const res = await fetch(`/api/mudae?name=${encodeURIComponent(char.name)}&series=${encodeURIComponent(char.series)}&info=true`);
           const data = await res.json();
           const idx = allChars.findIndex(c => c.id === char.id);
-          if (idx !== -1 && data.img) { allChars[idx].gender = data.gender; }
+          if (idx !== -1) {
+              allChars[idx].gender = data.gender;
+          }
         } catch (e) {}
       }));
       setProgress(Math.min(i + BATCH_SIZE, targets.length));
@@ -96,11 +72,10 @@ export default function MudaeHub() {
   };
 
   const handleImport = async () => {
-    if (!isUnlocked) return alert("Unlock profile to import!");
+    if (!isUnlocked) return alert("Unlock first!");
     const lines = inputText.split('\n');
     let currentSeries = "Unknown";
     const newCharacters = [];
-    
     lines.forEach(line => {
       const l = line.trim();
       if (!l || l.includes('Click to react') || l.includes('PM]') || l.includes('AM]')) return;
@@ -117,11 +92,10 @@ export default function MudaeHub() {
         }
       }
     });
-
-    if (newCharacters.length === 0) return alert("No valid characters found in text!");
+    if (newCharacters.length === 0) return alert("No valid chars!");
     await updateDoc(doc(db, "profiles", activeProfile), { characters: arrayUnion(...newCharacters) });
     setInputText('');
-    alert(`Successfully imported ${newCharacters.length} characters!`);
+    alert(`Imported ${newCharacters.length} characters!`);
   };
 
   const sortedChars = useMemo(() => {
@@ -142,12 +116,11 @@ export default function MudaeHub() {
           <div><h1 className="text-xl font-black text-white tracking-tighter uppercase italic leading-none">Mudae Hub</h1><p className="text-[10px] font-bold text-pink-500 tracking-[0.4em] uppercase mt-1">Dashboard</p></div>
         </div>
         <nav className="flex-1 space-y-3">
-          <p className="text-[12px] font-black text-slate-600 uppercase tracking-widest ml-2 mb-6">Rollers List</p>
           {Object.keys(profiles).map(name => (
             <button key={name} onClick={() => setActiveProfile(name)} className={`w-full flex items-center justify-between px-6 py-4 rounded-[20px] text-[15px] font-bold transition-all duration-300 ${activeProfile === name ? 'bg-pink-600 text-white shadow-2xl translate-x-2' : 'text-slate-400 hover:bg-white/5 hover:text-white'}`}>
               <div className="flex items-center gap-4"><Users size={20}/> {name}</div>
               {isUnlocked && activeProfile === name && (
-                <Trash2 size={18} className="text-white/40 hover:text-white transition-colors" onClick={(e) => { e.stopPropagation(); if(confirm(`Delete ${name} permanently?`)) deleteDoc(doc(db, "profiles", name)); }} />
+                <Trash2 size={18} className="text-white/40 hover:text-white transition-colors" onClick={(e) => { e.stopPropagation(); if(confirm(`Delete ${name}?`)) deleteDoc(doc(db, "profiles", name)); }} />
               )}
             </button>
           ))}
@@ -167,36 +140,22 @@ export default function MudaeHub() {
           </div>
 
           <div className="flex flex-wrap items-center gap-6 justify-center">
-            {/* ENHANCED PASSWORD FORM */}
             <form onSubmit={(e) => { e.preventDefault(); handleUnlock(); }} className="bg-slate-900/50 border-2 border-slate-800 rounded-[28px] flex items-center p-2.5 shadow-2xl focus-within:border-pink-600 transition-all">
               <input type="text" name="username" value={activeProfile} readOnly className="hidden" autoComplete="username" />
               {!isUnlocked && (
-                <input 
-                  type="password" 
-                  name="password" 
-                  placeholder="PASSWORD" 
-                  value={passwordInput} 
-                  autoComplete="current-password" 
-                  className="bg-transparent px-6 w-48 text-sm outline-none font-black tracking-[0.2em] text-white placeholder:text-slate-700" 
+                <input type="password" name="password" placeholder="PASSWORD" value={passwordInput} autoComplete="current-password" 
+                  className="bg-transparent px-6 w-48 text-sm outline-none font-black tracking-[0.2em] text-white placeholder:text-slate-700 selection:bg-pink-500/30" 
                   onChange={(e) => setPasswordInput(e.target.value)} 
-                  required
                 />
               )}
-              <button type="submit" className={`p-3.5 rounded-2xl transition-all duration-500 ${isUnlocked ? 'bg-green-500 text-white shadow-lg rotate-[360deg]' : 'bg-slate-800 text-slate-500 hover:text-white'}`}>
-                {isUnlocked ? <Unlock size={24}/> : <Lock size={24}/>}
-              </button>
+              <button type="submit" className={`p-3.5 rounded-2xl transition-all duration-500 ${isUnlocked ? 'bg-green-500 text-white shadow-lg rotate-[360deg]' : 'bg-slate-800 text-slate-500 hover:text-white'}`}><Unlock size={24}/></button>
             </form>
-            
             <div className="flex flex-col gap-3">
-              <button onClick={() => smartFixer(false)} disabled={!isUnlocked || isFixing} className="bg-blue-600 hover:bg-blue-500 disabled:bg-slate-900 text-white px-10 py-5 rounded-[32px] text-[16px] font-black uppercase tracking-widest flex items-center gap-6 shadow-2xl shadow-blue-600/20 active:scale-95 transition-all min-w-[240px] justify-center">
+              <button onClick={() => smartFixer(false)} disabled={!isUnlocked || isFixing} className="bg-blue-600 hover:bg-blue-500 disabled:bg-slate-900 text-white px-10 py-5 rounded-[32px] text-[16px] font-black uppercase tracking-widest flex items-center gap-6 shadow-2xl active:scale-95 transition-all min-w-[240px] justify-center">
                 {isFixing ? <RefreshCw size={22} className="animate-spin"/> : <CheckCircle2 size={22}/>}
-                {isFixing ? `FIXING: ${progress} / ${totalToFix}` : 'Scan Harem'}
+                {isFixing ? `FIXING: ${progress}` : 'Scan Harem'}
               </button>
-              {isUnlocked && !isFixing && (
-                <button onClick={() => {if(confirm('Refresh data for ALL characters?')) smartFixer(true)}} className="bg-slate-900/50 border-2 border-pink-600/20 hover:border-pink-600/60 text-[11px] font-black text-slate-400 hover:text-pink-500 uppercase py-3 rounded-[20px] flex items-center justify-center gap-3 transition-all tracking-widest">
-                  <Zap size={14}/> FULL RESCAN
-                </button>
-              )}
+              {isUnlocked && !isFixing && <button onClick={() => {if(confirm('Refresh ALL images?')) smartFixer(true)}} className="bg-slate-900/50 border-2 border-pink-600/20 hover:border-pink-600/60 text-[11px] font-black text-slate-400 hover:text-pink-500 uppercase py-3 rounded-[20px] flex items-center justify-center gap-3 transition-all tracking-widest"><Zap size={14}/> FULL RESCAN</button>}
             </div>
           </div>
         </header>
