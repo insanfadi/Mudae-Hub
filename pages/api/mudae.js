@@ -11,7 +11,7 @@ export default async function handler(req, res) {
     });
     
     const aniData = await aniRes.json();
-    let imageUrl = "https://via.placeholder.com/225x350?text=Searching...";
+    let imageUrl = "";
     let seriesName = "Unknown Series";
 
     if (aniData.data?.Character) {
@@ -21,13 +21,15 @@ export default async function handler(req, res) {
 
     if (info) return res.status(200).json({ series: seriesName, image: imageUrl });
 
-    // Stream the image with a fast timeout
-    const imageRes = await fetch(imageUrl);
-    const buffer = await imageRes.arrayBuffer();
-    res.setHeader('Content-Type', 'image/png');
-    res.setHeader('Cache-Control', 'public, s-maxage=604800'); 
-    return res.send(Buffer.from(buffer));
+    if (imageUrl) {
+      const imageRes = await fetch(imageUrl);
+      const buffer = await imageRes.arrayBuffer();
+      res.setHeader('Content-Type', 'image/png');
+      res.setHeader('Cache-Control', 'public, s-maxage=31536000'); 
+      return res.send(Buffer.from(buffer));
+    }
+    return res.redirect('https://via.placeholder.com/225x350?text=No+Image');
   } catch (e) {
-    return res.redirect('https://via.placeholder.com/225x350?text=Error');
+    return res.status(500).json({ error: "Failed" });
   }
 }
