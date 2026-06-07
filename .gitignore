@@ -33,3 +33,7 @@ pnpm-debug.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+.next
+.mudae_cache.json
+scratch*.js
+scratch*.mjs
