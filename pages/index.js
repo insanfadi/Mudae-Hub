@@ -16,6 +16,12 @@ export default function MudaeHub() {
   const [progress, setProgress] = useState(0);
   const [totalToFix, setTotalToFix] = useState(0);
   const [sortMode, setSortMode] = useState('kakera');
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage =20;
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [activeProfile, query, wishlistText]);
 
   useEffect(() => {
     const unsub = onSnapshot(collection(db, "profiles"), (s) => {
@@ -124,6 +130,8 @@ export default function MudaeHub() {
   }, [profiles, activeProfile, query, wishlistText, sortMode]);
 
   const totalValue = useMemo(() => sortedChars.reduce((sum, c) => sum + (c.kakera || 0), 0), [sortedChars]);
+  const totalPages = Math.ceil(sortedChars.length / itemsPerPage);
+  const paginatedChars = sortedChars.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
   return (
     <div className="min-h-screen bg-[#0b0f1a] text-slate-300 flex flex-col md:flex-row font-sans">
@@ -196,7 +204,28 @@ export default function MudaeHub() {
             </div>
           </div>
           <div className="lg:col-span-3 grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-10">
-            {sortedChars.map((c) => (<CharacterCard key={c.id} char={c} isUnlocked={isUnlocked} onDelete={(char) => updateDoc(doc(db, "profiles", activeProfile), { characters: arrayRemove(char) })} onToggleTrade={(cid) => { const currentTags = profiles[activeProfile]?.tradeTags || []; const isTagged = currentTags.includes(cid); updateDoc(doc(db, "profiles", activeProfile), { tradeTags: isTagged ? arrayRemove(cid) : arrayUnion(cid) }); }} isTagged={profiles[activeProfile]?.tradeTags?.includes(c.id)} />))}
+            {paginatedChars.map((c) => (<CharacterCard key={c.id} char={c} isUnlocked={isUnlocked} onDelete={(char) => updateDoc(doc(db, "profiles", activeProfile), { characters: arrayRemove(char) })} onToggleTrade={(cid) => { const currentTags = profiles[activeProfile]?.tradeTags || []; const isTagged = currentTags.includes(cid); updateDoc(doc(db, "profiles", activeProfile), { tradeTags: isTagged ? arrayRemove(cid) : arrayUnion(cid) }); }} isTagged={profiles[activeProfile]?.tradeTags?.includes(c.id)} />))}
+            {totalPages > 1 && (
+              <div className="col-span-full flex justify-center items-center gap-4 mt-8 mb-12">
+                <button 
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))} 
+                  disabled={currentPage === 1}
+                  className="bg-slate-800 hover:bg-pink-600 disabled:opacity-50 disabled:hover:bg-slate-800 px-8 py-3 rounded-full text-sm font-black tracking-widest text-white transition-all"
+                >
+                  PREV
+                </button>
+                <span className="text-pink-500 font-black tracking-widest text-sm bg-pink-900/20 border-2 border-pink-500/20 px-6 py-2 rounded-full">
+                  PAGE {currentPage} OF {totalPages}
+                </span>
+                <button 
+                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} 
+                  disabled={currentPage === totalPages}
+                  className="bg-slate-800 hover:bg-pink-600 disabled:opacity-50 disabled:hover:bg-slate-800 px-8 py-3 rounded-full text-sm font-black tracking-widest text-white transition-all"
+                >
+                  NEXT
+                </button>
+              </div>
+            )}
           </div>
         </section>
       </main>
