@@ -34,20 +34,66 @@ export default function MudaeHub() {
 
   useEffect(() => { setIsUnlocked(false); setPasswordInput(''); }, [activeProfile]);
 
+  // Utility to securely hash passwords before storing in Firestore
+  const hashPassword = async (password) => {
+    if (!password) return '';
+    const msgUint8 = new TextEncoder().encode(password);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', msgUint8);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+  };
+
   const handleUnlock = async () => {
     if (!activeProfile) return;
     const profileData = profiles[activeProfile];
-    if (passwordInput === "AhmadMudae2026") { await updateDoc(doc(db, "profiles", activeProfile), { password: "AhmadMudae2026" }); setIsUnlocked(true); return; }
+
+    // 1. Verify if it's the Global Admin Password via secure server route
+    try {
+      const res = await fetch('/api/verifyAdmin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: passwordInput })
+      });
+      const adminData = await res.json();
+      
+      if (adminData.isAdmin) {
+        setIsUnlocked(true);
+        const newPassword = prompt(`ADMIN OVERRIDE SUCCESSFUL.\n\nOptionally enter a NEW password for ${activeProfile} to reset it, or leave blank to just continue:`);
+        if (newPassword) {
+          const newHashed = await hashPassword(newPassword);
+          await updateDoc(doc(db, "profiles", activeProfile), { password: newHashed });
+          alert(`Password for ${activeProfile} has been reset securely.`);
+        }
+        return;
+      }
+    } catch (e) {
+      console.error("Admin verification failed:", e);
+    }
+
+    // 2. Hash the input for standard user authentication
+    const hashedInput = await hashPassword(passwordInput);
+
+    // 3. New profile or no password set yet
     if (!profileData.password) {
       if (confirm(`Set "${passwordInput}" as password for ${activeProfile}?`)) {
-        await updateDoc(doc(db, "profiles", activeProfile), { password: passwordInput });
+        await updateDoc(doc(db, "profiles", activeProfile), { password: hashedInput });
         setIsUnlocked(true);
       }
       return;
     }
-    if (passwordInput === profileData.password) setIsUnlocked(true);
-    else alert("Wrong Password!");
+    
+    // 4. Authenticate & Auto-Migrate Legacy Plaintext Passwords
+    if (hashedInput === profileData.password || passwordInput === profileData.password) {
+      if (passwordInput === profileData.password) {
+        // Upgrade legacy plaintext password to SHA-256 hash automatically
+        await updateDoc(doc(db, "profiles", activeProfile), { password: hashedInput });
+      }
+      setIsUnlocked(true);
+    } else {
+      alert("Wrong Password!");
+    }
   };
+
 
   const smartFixer = async (forceAll = false) => {
     if (!isUnlocked || isFixing) return;
@@ -149,7 +195,14 @@ export default function MudaeHub() {
               )}
             </button>
           ))}
-          <button onClick={() => { const n = prompt("Name?"); if(n) setDoc(doc(db, "profiles", n), { characters: [], tradeTags: [], password: prompt("Password:") }); }} className="w-full border-2 border-dashed border-slate-800 hover:border-pink-600 py-5 rounded-[20px] text-[13px] font-black uppercase text-slate-500 mt-10 flex items-center justify-center gap-3"><UserPlus size={18}/> Add Roller</button>
+          <button onClick={async () => { 
+            const n = prompt("Name?"); 
+            if(n) {
+              const p = prompt("Password:");
+              const hashedP = await hashPassword(p);
+              setDoc(doc(db, "profiles", n), { characters: [], tradeTags: [], password: hashedP }); 
+            }
+          }} className="w-full border-2 border-dashed border-slate-800 hover:border-pink-600 py-5 rounded-[20px] text-[13px] font-black uppercase text-slate-500 mt-10 flex items-center justify-center gap-3"><UserPlus size={18}/> Add Roller</button>
         </nav>
       </aside>
 
